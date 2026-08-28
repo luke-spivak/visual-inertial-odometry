@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# colcon / ROS 2 build artifacts
+build/
+install/
+log/
+
+# Datasets and recorded runs — large, and reproducible via harness/
+datasets/
+*.bag
+*.db3
+*.mcap
