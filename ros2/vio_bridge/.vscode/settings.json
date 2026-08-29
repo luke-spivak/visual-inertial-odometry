@@ -1,0 +1,12 @@
+{
+  "python.defaultInterpreterPath": "/usr/bin/python3",
+  "python.analysis.extraPaths": [
+    "/opt/ros/jazzy/lib/python3.12/site-packages",
+    "/home/luke/.local/lib/python3.12/site-packages",
+    "/home/luke/ws_vio/install/vio_bridge/lib/python3.12/site-packages"
+  ],
+  "python.autoComplete.extraPaths": [
+    "/opt/ros/jazzy/lib/python3.12/site-packages",
+    "/home/luke/.local/lib/python3.12/site-packages"
+  ]
+}

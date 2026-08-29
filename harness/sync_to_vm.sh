@@ -10,8 +10,14 @@ WS="${2:-~/ws_vio}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)/ros2/"
 
 ssh "$HOST" "mkdir -p $WS/src"
-rsync -av --delete \
+# --update: never overwrite a file that is NEWER on the VM. Editing happens in
+#   the VM (VS Code Remote-SSH, where rclpy resolves), so a blind push would
+#   clobber live work with a stale local copy.
+# --backup: anything overwritten is kept in .sync-backup/ rather than lost.
+# No --delete: removing remote files is not worth the blast radius.
+rsync -av --update --backup --backup-dir=.sync-backup \
   --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' \
+  --exclude '.sync-backup' \
   "$SRC" "$HOST:$WS/src/"
 
 echo
