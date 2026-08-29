@@ -1,0 +1,117 @@
+<?xml version='1.0'?>
+<sdf version='1.9'>
+  <model name='iris_with_vio'>
+
+    <!--
+      Iris quad with a VIO payload: camera + IMU rigidly co-mounted.
+
+      Deliberately NOT the gimballed camera from iris_with_gimbal. VIO assumes
+      a FIXED camera-IMU extrinsic; a gimbal moves the camera relative to the
+      body and breaks that assumption outright.
+
+      The IMU here is separate from iris_with_standoffs' imu_sensor, which
+      feeds ArduPilot SITL. That mirrors the hardware: ISM330DHCX on the Pi,
+      alongside the camera, on the companion computer's clock -- not the
+      flight controller's. See PROJECT.md "Sim harness".
+    -->
+
+    <include>
+      <uri>model://iris_with_standoffs</uri>
+    </include>
+
+    <link name="vio_link">
+      <!-- Forward and slightly above the body origin, roughly where the
+           camera would sit on the real airframe. -->
+      <pose relative_to="iris_with_standoffs::base_link">0.10 0 0.02 0 0 0</pose>
+
+      <inertial>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>1e-5</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>1e-5</iyy><iyz>0</iyz>
+          <izz>1e-5</izz>
+        </inertia>
+      </inertial>
+
+      <!-- Matches the InnoMaker OV9281: 640x400 global shutter, mono. -->
+      <sensor name="vio_camera" type="camera">
+        <gz_frame_id>vio_link</gz_frame_id>
+        <pose>0 0 0 0 0 0</pose>
+        <camera>
+          <horizontal_fov>1.3963</horizontal_fov>  <!-- 80 deg -->
+          <image>
+            <width>640</width>
+            <height>400</height>
+            <format>L8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>1000</far>
+          </clip>
+        </camera>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <visualize>0</visualize>
+      </sensor>
+
+      <!--
+        Noise values are EuRoC's (ADIS16448-class MEMS), used as a realistic
+        placeholder. REPLACE with the Allan variance results for the
+        ISM330DHCX from Phase 2 step 5, and record which was used in any
+        result you report.
+
+        stddev semantics in gz-sim are per-sample, NOT noise density. If the
+        measured Allan deviation of the sim IMU does not match what is asked
+        for here, the fix is stddev = density * sqrt(update_rate).
+      -->
+      <sensor name="vio_imu" type="imu">
+        <gz_frame_id>vio_link</gz_frame_id>
+        <pose>0 0 0 0 0 0</pose>
+        <always_on>1</always_on>
+        <update_rate>200</update_rate>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian">
+              <mean>0</mean><stddev>1.6968e-04</stddev>
+              <dynamic_bias_stddev>1.9393e-05</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+            </noise></x>
+            <y><noise type="gaussian">
+              <mean>0</mean><stddev>1.6968e-04</stddev>
+              <dynamic_bias_stddev>1.9393e-05</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+            </noise></y>
+            <z><noise type="gaussian">
+              <mean>0</mean><stddev>1.6968e-04</stddev>
+              <dynamic_bias_stddev>1.9393e-05</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+            </noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian">
+              <mean>0</mean><stddev>2.0000e-03</stddev>
+              <dynamic_bias_stddev>3.0000e-03</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+            </noise></x>
+            <y><noise type="gaussian">
+              <mean>0</mean><stddev>2.0000e-03</stddev>
+              <dynamic_bias_stddev>3.0000e-03</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+            </noise></y>
+            <z><noise type="gaussian">
+              <mean>0</mean><stddev>2.0000e-03</stddev>
+              <dynamic_bias_stddev>3.0000e-03</dynamic_bias_stddev>
+              <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+            </noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </link>
+
+    <joint name="vio_joint" type="fixed">
+      <parent>iris_with_standoffs::base_link</parent>
+      <child>vio_link</child>
+    </joint>
+
+  </model>
+</sdf>
