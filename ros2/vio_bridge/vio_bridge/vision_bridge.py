@@ -1,8 +1,9 @@
 import rclpy
 from rclpy.node import Node
 from pymavlink import mavutil
-
 from nav_msgs.msg import Odometry
+from scipy.spatial.transform import Rotation
+from vio_bridge.frames import position_enu_to_ned, orientation_enu_flu_to_ned_frd
 
 class BridgeNode(Node):
     """
@@ -12,43 +13,59 @@ class BridgeNode(Node):
     """
     
     def __init__(self):
-        super.__init__('bridge_node')
+        super().__init__('bridge_node')
         self.subscription = self.create_subscription(
             Odometry,
-            'nav_msgs/Odometry',
+            '/ov_msckf/odomimu',
             self.on_odom,
             10, 
         )
+        self.mav = mavutil.mavlink_connection('udpout:127.0.0.1:14550', source_system=1, source_component=191)
+        self._min_period_us = 1_000_000 // 30   # 30 Hz out; odomimu arrives at ~200 Hz
+        self._last_sent_us = 0
         return
     
     def on_odom(self, msg: Odometry):
-        '''
-        1. Reads the position and orientation out of the ROS message
-        2. Rewrites those numbers into ArduPilot's convention
-        3. Sends them as the eight fields above
-        '''
-        # Rotate position
-        # ENU -> NED
-        msg.pose.pose.position
-        enu_to_ned_matrix = [
-            [0, 1, 0],
-            [1, 0, 0],
-            [0, 0, -1],
-        ]
-        # Rotate orientation
-        # FLU/ENU = FRD/NED
-        msg.pose.pose.orientation # quaternion
+        """
+        Translate one OpenVINS pose into a MAVLink VISION_POSITION_ESTIMATE.
+
+        In:  position ENU, orientation of FLU body within ENU world (REP-103).
+        Out: position NED, orientation of FRD body within NED world (aerospace).
+
+        Origin offset and yaw alignment are deliberately NOT handled here --
+        that is ArduPilot's Viso Align (RCx_OPTION = 80). This node only
+        changes conventions.
+        """
+        usec = msg.header.stamp.sec * 1_000_000 + msg.header.stamp.nanosec // 1000
+
+        # Downsample to 30 Hz using measurement time, not wall clock, so this
+        # behaves the same under bag playback and sim time.
+        if usec < self._last_sent_us:          # bag looped or clock jumped
+            self._last_sent_us = 0
+        if usec - self._last_sent_us < self._min_period_us:
+            return
+        self._last_sent_us = usec
+
+        # Position: ENU -> NED.  N = y_enu, E = x_enu, D = -z_enu
+        p = msg.pose.pose.position
+        x, y, z = position_enu_to_ned(p.x, p.y, p.z)
+
+        # Orientation: rotate the world frame on the left, the body frame on
+        # the right. Both must change -- ENU->NED alone leaves the body in FLU.
+        q = msg.pose.pose.orientation
+        roll, pitch, yaw = orientation_enu_flu_to_ned_frd(q.x, q.y, q.z, q.w)
+
+        self.mav.mav.vision_position_estimate_send(
+            usec, x, y, z, roll, pitch, yaw
+        )
         
-        # Convert the ROS timestamp to microseconds
-        msg.header.stamp.sec
-        msg.header.stamp.nanosec
-        return
-    
-
-
-def main():
-    print('Hi from vio_bridge.')
-
-
-if __name__ == '__main__':
-    main()
+def main(args=None):
+    rclpy.init(args=args)
+    node = BridgeNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
