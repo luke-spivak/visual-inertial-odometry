@@ -373,6 +373,20 @@ TF-Luna on I2C rather than serial specifically to free a UART. Verify exact UART
 5. GPS disabled mid-flight, EKF3 holds position on vision alone
 6. Headless batch runs across altitude/speed/texture, ATE and RPE out
 
+**ROS 2 launch arguments silently override YAML.** `subscribe.launch.py` always passes `max_cameras`, `use_stereo`, and `save_total_state` as ROS parameters, using its own defaults when not specified — and ROS parameters beat config-file values. A mono config with `max_cameras: 1` still tries to load `cam1` and dies with "unable to parse all parameters". Launch the sim config as:
+
+```
+ros2 launch ov_msckf subscribe.launch.py \
+  config_path:=$HOME/vio_openvins/gz_sim/estimator_config.yaml \
+  max_cameras:=1 use_stereo:=false rviz_enable:=false
+```
+
+Whenever a config setting appears to have no effect, check whether a launch file passes that same name.
+
+**Environment trap — ROS shadows Gazebo.** Sourcing ROS 2 Jazzy breaks the standalone `gz sim` CLI. ROS ships *vendored* gz libraries (`gz_transport_vendor`, `gz_msgs_vendor`, `gz_math_vendor`) and points `GZ_CONFIG_PATH` at them; those vendor packages contain no `gz-sim`, so the `sim` subcommand silently disappears and `gz sim` prints its help text instead of an error. Run Gazebo and `ros_gz_bridge` in **separate shells** — Gazebo without ROS sourced, the bridge with it.
+
+**Sensor rates look wrong and aren't.** Gazebo sensors publish in *sim* time, so wall-clock rate is RTF × configured rate. At ~0.5 RTF a 200 Hz IMU measures as ~105 Hz on `ros2 topic hz`. Timestamps are correct, so the estimator is unaffected.
+
 **The trap:** sim VIO is misleadingly easy. Perfect global shutter, no motion blur, no vibration, exact camera-IMU timestamps. A working sim proves the plumbing and proves nothing about the front end. Mitigation: put realistic noise and bias random walk on the Gazebo IMU in the SDF, add camera noise, and **inject a known 30 ms camera-IMU time offset to confirm online `td` estimation recovers it.** If a synthetic offset can't be detected in sim, the real one won't be either.
 
 
