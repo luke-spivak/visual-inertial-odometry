@@ -132,5 +132,12 @@
       <pose degrees="true">0 0 0.195 0 0 90</pose>
     </include>
 
+    <!-- Depth structure. Without this every tracked feature lies on the
+         runway plane, which is a monocular degeneracy: see PROJECT.md. -->
+    <include>
+      <uri>model://vio_feature_field</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
   </world>
 </sdf>
