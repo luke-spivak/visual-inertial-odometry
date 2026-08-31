@@ -1,0 +1,37 @@
+%YAML:1.0
+
+# Monocular camera on the Gazebo iris_with_vio model.
+#
+# Intrinsics read from the bridged /cam0/camera_info, and they match theory:
+# fx = (width/2) / tan(hfov/2) = 320 / tan(0.69815) = 381.35
+#
+# Zero distortion is a simulation artifact. The real OV9281 will have genuine
+# radtan coefficients, so sim results flatter the front end slightly.
+
+cam0:
+  # OpenVINS reads this as R_CtoI (camera -> IMU) and p_CinI, despite the
+  # Kalibr-style name. Camera and IMU share the vio_link origin, so the
+  # translation is zero and this is purely the frame difference.
+  #
+  # The camera is pitched 90 deg down, so its gz SENSOR axes in the IMU's
+  # FLU frame are:  X=(0,0,-1) down,  Y=(0,1,0) left,  Z=(1,0,0) forward.
+  # The OPTICAL frame relates to the sensor frame as:
+  #   optical X = -sensor Y,  optical Y = -sensor Z,  optical Z = +sensor X
+  # giving optical axes in IMU coords:
+  #   optical X (right) -> ( 0, -1,  0)
+  #   optical Y (down)  -> (-1,  0,  0)
+  #   optical Z (fwd)   -> ( 0,  0, -1)
+  # Check: a point 5 m below the vehicle is (0,0,-5) in IMU and
+  # R^T*(0,0,-5) = (0,0,5) in camera -- 5 m along optical Z. Correct.
+  T_imu_cam:
+    - [ 0.0, -1.0,  0.0,  0.0]
+    - [-1.0,  0.0,  0.0,  0.0]
+    - [ 0.0,  0.0, -1.0,  0.0]
+    - [ 0.0,  0.0,  0.0,  1.0]
+  cam_overlaps: []
+  camera_model: pinhole
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]
+  distortion_model: radtan
+  intrinsics: [381.347, 381.347, 320.0, 200.0] #fu, fv, cu, cv
+  resolution: [640, 400]
+  rostopic: /cam0/image_raw
