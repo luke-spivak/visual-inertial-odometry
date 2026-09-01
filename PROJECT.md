@@ -418,7 +418,203 @@ Published OpenVINS on the easy EuRoC sequences is roughly 5–9 cm ATE. Run 2 la
 
 - **Take the trajectory from `/ov_msckf/odomimu`, not `save_total_state`.** The state file is `timestamp q p v bg ba …` — quaternion before position, JPL convention, storing `q_GtoI`. Feed it to a TUM-format reader and you get ~135° orientation error and a plausible-looking wrong answer. `nav_msgs/Odometry` has documented, unambiguous conventions.
 - **Record with `-s sqlite3`.** An mcap bag whose recorder is killed before finalizing fails to open with "file end magic is invalid." `ros2 bag reindex <dir> -s <storage>` rebuilds a missing `metadata.yaml`, but cannot repair an unfinalized mcap.
-- **`pkill -f` matches your own shell** when the pattern appears in its command line. Use `pkill -x` on the process name.
+- **Neither `pkill` form works by default.** `pkill -f` matches the shell issuing it, when the pattern appears in that shell's own command line — which killed a live SSH session. `pkill -x` avoids that but silently matches nothing for anything with a long name: `/proc/<pid>/comm` truncates to 15 characters and `run_subscribe_msckf` is 19. Use `-f` from **inside a script file** (where the pattern is in the file, not the command line), which is what `run_sim_vio.sh` does.
+
+### Sim scene realism — the black-image investigation (2026-08-31)
+
+Three consecutive harness runs flew a full mission and recorded **zero** odometry messages. The camera images were near-black, which reads unmistakably as "the renderer is broken" — and that read was wrong, twice, in two different ways. Both are recorded because the wrong diagnosis cost more than the fix.
+
+**Separate the renderer from the scene before touching either.** `gazebo/worlds/render_probe.sdf` is a vehicle-free, SITL-free world: a static camera 15 m up looking down at three 4 m patches of known albedo (0.05 / 0.50 / 0.95), plus the same surfaces the flight world uses. It starts in ~25 s instead of several minutes. The patches came out at **11 / 112 / 214** — linear in albedo and exactly as specified. That single measurement exonerates the whole render path (Ogre2, llvmpipe, GLX, Xvfb, lighting, materials) and says the fault is in the scene. Keep the probe: any future "the camera is black" gets one cheap, decisive answer.
+
+**The actual defect was texture spatial scale, not rendering.** The runway model's 2K albedo map is stretched across a 1500 × 100 m plane. Ground sample distance for our camera is
+
+```
+GSD = 2 · alt · tan(hfov/2) / width = 2 · 10 · tan(0.698) / 640 = 2.6 cm/px
+```
+
+so at altitude the entire visible patch of ground minified to a couple of texels. On the frame from the failed flight, 97.6 % of pixels sat on two adjacent grey values and **91 % of 16×16 blocks had a local standard deviation below 1.0**. A KLT tracker needs a local gradient. Zero gradient is zero features, and it is visually indistinguishable from a lighting failure.
+
+Measured on the probe, which isolates the two surfaces:
+
+| Scene | flat blocks | verdict |
+|---|---|---|
+| Failed flight frame (runway only) | 91 % | zero odometry messages |
+| Obstacle field, untextured ground | 62 % | ground contributes nothing |
+| Obstacle field + tiled ground | **12 %** | trackable |
+
+Fix: `gazebo/worlds/make_ground.py` generates a visual-only tiled ground sized to the *camera* rather than the world — 10 m tiles carrying 512 px textures, 1.95 cm/texel, just under the GSD. Four variants, standardised to a common mean and standard deviation rather than normalised individually, because per-image normalisation made the tile boundaries into perfectly straight edges on a regular 10 m grid: strong features that exist nowhere in reality and repeat, which is an invitation for false correspondences. Flat blocks dropped **62 % → 12 %**.
+
+`gazebo/worlds/make_feature_field.py` generates the depth structure, addressing the coplanar-feature degeneracy noted above. Both are generators, not hand-written SDF, so scene structure is an *experiment variable*: rerun with a different `--count` or height range and measure how drift responds to how much 3D the scene actually has. The camera is mono8, so the albedo that varies is **lightness** — two objects with different hues and equal luminance are the same grey and there is no edge between them.
+
+**A local contrast measure is the right gate, not mean brightness.** `min`/`max`/`mean` all looked plausible on frames that were useless (max was 255 — from 954 pixels of blown highlight out of 256 000). The fraction of image blocks with near-zero standard deviation predicts trackability; brightness does not. `harness/check_camera.py` now reports `flat_blocks=NN%` and the harness refuses to fly above 40 %.
+
+**Pace missions on vehicle state, never on a wall clock.** Software rendering runs Gazebo at RTF ≈ 0.2 (measured: a 200 Hz IMU arrives at 39 Hz wall, a 30 Hz camera at 5.8 Hz). Every `time.sleep(12)` in the mission script bought 2.4 s of flight, so the next waypoint was commanded while the vehicle was still most of the way from the last one — it chased a moving target and flew nothing resembling the intended square. `fly_sim_mission.py` now waits on `LOCAL_POSITION_NED` and `EKF_STATUS_REPORT`, with wall-clock values used only as failure backstops. This is correct at any RTF and strictly better than sleeping even at 1.0.
+
+**The camera check is a hard gate.** A featureless image means the mission is wasted wall time, and at RTF 0.2 that is expensive. `run_sim_vio.sh` now aborts before flying unless `ALLOW_BLACK=1`.
+
+### Two silent failures in the sim plumbing (2026-08-31)
+
+Both produce well-formed output that is wrong, which is worse than an error.
+
+**ArduPilot's lockstep freezes Gazebo before the vehicle flies.** `ardupilot_gazebo` runs the sim in lockstep with SITL. From the moment SITL connects until it is actually driving the motors, Gazebo's update loop is blocked — measured directly: `/world/<w>/stats` published **nothing across a 10 s window**, and no camera frames came out either. Free-running without SITL, the same world does RTF ≈ 0.4 and delivers its first frame **1.6 s** after a subscriber appears.
+
+This is what made the render look broken. A camera check placed after SITL start reports a dead camera on a sim that is merely paused, and a full mission then flies with the first frames arriving only once the vehicle is airborne. **Any sensor check has to run before SITL starts**, which is now the order in `run_sim_vio.sh`.
+
+**Ground truth from `dynamic_pose/info` records thousands of useless messages without erroring.** gz populates entity names and a header stamp on that topic — verified with `gz topic -e`. `ros_gz_bridge`'s `Pose_V → tf2_msgs/TFMessage` conversion delivers every transform with **empty parent and child frame ids and stamp 0**. A recorded bag looks healthy: 3006 messages, right type, plausible translations. There is no way to tell which body any of them describes, or when.
+
+Fix: attach `gz-sim-odometry-publisher-system` to the model in the world file and bridge `nav_msgs/Odometry`. Correct sim timestamps, and the same message type as `/ov_msckf/odomimu`, so both sides of the comparison go through identical code — a format bug that hits both equally is far easier to catch than one that quietly biases only the reference.
+
+**But `<robot_base_frame>` on that plugin is a label, not a selector.** It names the frame on the outgoing message; the pose published is always the *model's*, whichever link is named. Measured: the plugin reported z = 0.195 (model origin) where `vio_link` sits at z = 0.215.
+
+That 0.102 m offset is not ignorable. It is comparable to the entire EuRoC-baseline ATE (0.067–0.115 m), and because it is a **body-frame lever arm it survives evo's Umeyama alignment** — alignment removes one global rigid transform, not a rotation-dependent offset — so it would appear as yaw-correlated error and read as estimator drift. `gt_to_tum.py --lever 0.10,0,0.02` composes it. Re-measure after any model change with:
+
+```
+gz topic -e -t /world/iris_runway/pose/info -n 1
+```
+
+which reports each link's pose in its parent model's frame.
+
+### Real-time factor is a budget, and the scene spends it (2026-08-31)
+
+Measured on the field world, Δsim over Δreal:
+
+| Configuration | RTF |
+|---|---|
+| Feature field only, no camera subscriber | 0.75 |
+| + 81 textured ground tiles | 0.40 |
+| + camera subscribed (Ogre2 actually renders) | 0.20 |
+
+Two things worth knowing. **Rendering is only half the cost** — the ground tiles halved RTF before any pixel was drawn, purely as scene-graph load, despite being visual-only with no collision. And **Gazebo's camera sensors are lazy**: with nothing subscribed to the image topic, nothing renders. Any RTF measured without a subscriber is optimistic by 2×, which is easy to fool yourself with.
+
+This matters beyond wall-clock patience, because `ardupilot_gazebo` runs in lockstep (`<lock_step>1</lock_step>`) and the coupling is not robust to a slow sim. When it breaks, the plugin logs `Drained n packets: 142` / `Missed 143 input frames` — ArduPilot running *ahead* and flooding, not starving — Gazebo's clock stops, and it does not recover even after SITL is killed. The vehicle never arms and the mission times out with no obvious cause.
+
+RTF alone is not the whole story: a lighter world completed a mission at RTF ≈ 0.19 while the field world froze at ≈ 0.20. Whatever the precise trigger, headroom is the defence, so scene cost is worth spending deliberately rather than accidentally.
+
+### The recurring bug: assuming an operation finished (2026-08-31)
+
+Three separate failures in this harness, each initially blamed on something else, were the same mistake — issuing an operation and proceeding as if it had completed.
+
+| Where | Assumed | Actually |
+|---|---|---|
+| `sleep 35` after starting SITL | It is up | Recompiles for 3–4 min on a new frame |
+| `time.sleep(12)` between waypoints | Vehicle arrived | 2.4 s of flight at RTF 0.2; it never arrived |
+| `pkill` then `sleep 1` before restarting Xvfb | Old server is gone | Still dying; it deleted `/tmp/.X11-unix/X77` *after* the replacement claimed it |
+
+The last one is the most instructive, because the symptom pointed somewhere else entirely: Gazebo died mid-run with `XIO: fatal IO error on X server ":77"`, the camera produced nothing, and the obvious reading was a broken display stack. It cost two runs and was only found by noticing that a leftover process from unrelated manual testing was present both times.
+
+`pkill` delivers a signal; it does not wait. Every teardown in `run_sim_vio.sh` now kills, polls until the processes are actually gone, escalates to `-9`, and removes the stale X lock and socket. The corresponding rule for startup is already in place: poll for the condition (`wait_for_port`, `xdpyinfo`, `LOCAL_POSITION_NED`) rather than sleeping a guessed interval.
+
+**A sleep is a guess about someone else's completion time.** Where the thing being waited on can report its own state, wait on that instead.
+
+### Lockstep was never on, and that silently swapped the EKF (2026-08-31)
+
+The most consequential finding so far, and it was not the one being chased.
+
+`iris_with_vio` is copied from `iris_with_ardupilot`, which upstream ships with **both** `<lock_step>1</lock_step>` and `<no_time_sync>1</no_time_sync>` (ardupilot_gazebo 65937b7). They contradict each other and `no_time_sync` wins. The plugin sends it in its JSON, ArduPilot obeys — `SIM_JSON.cpp` prints `Forcing use_time_sync=0` — and then gates lockstep on the same flag:
+
+```cpp
+if (use_time_sync && !state.no_lockstep) { adjust_frame_time(...); }
+```
+
+So `lock_step` did nothing in any run. ArduPilot free-ran, flooded the plugin (`Drained n packets: 142`), and Gazebo's clock stopped.
+
+**The part that matters is three lines further down:**
+
+```cpp
+if (!use_time_sync) {
+    // if not using time sync then default EKF type to 10, as
+    // otherwise EKF is likely to diverge
+    AP_Param::set_default_by_name("AHRS_EKF_TYPE", 10);
+}
+```
+
+EKF type 10 is the SITL *fake* EKF: it reads state straight from the simulator. **Milestones 4 and 5 exist to test what EKF3 does when fed vision, and against type 10 they pass while proving nothing.** A GPS-denied hold would have looked perfect because the "estimator" was reading ground truth.
+
+Fix: `<no_time_sync>0</no_time_sync>`. Real lockstep means ArduPilot waits for each Gazebo frame, so a slow sim costs wall-clock time and nothing else — which is fine, because the mission is paced in sim time.
+
+**The near-miss worth remembering.** The route here was an apparent fix: `SIM_SPEEDUP 0.2` made the EKF converge in 11 s of sim time where it had been hanging indefinitely, and the plugin's backlog shrank instead of growing. It looked like the answer. It was not — setting `SIM_SPEEDUP != 1` is another way to disable time sync, so the "success" was ArduPilot no longer waiting for the sim *and* quietly switching to the fake EKF. The vehicle then armed and never climbed, because with time sync off it also gets no FDM at all (`No JSON sensor message received, resending servos`). Had it climbed, this would have produced a plausible drift number measured against ground truth wearing an EKF costume.
+
+`fly_sim_mission.py` now reads back `AHRS_EKF_TYPE` after the EKF is ready and aborts if it is 10. A failure this quiet needs a specific assertion; nothing else in the pipeline would have caught it.
+
+### Answered: gz `<stddev>` is per-sample, not a noise density (2026-08-31)
+
+Measured from a recorded flight, over 7216 samples while the vehicle sat disarmed on the runway (`harness/count_features.py`'s sibling check, `imu_check.py` pattern):
+
+```
+accel mean (m/s^2):  x=+0.0081  y=+0.0067  z=+9.7914   |a| = 9.7914
+gyro  stddev:        1.88e-04 rad/s   (SDF asked 1.6968e-04)
+```
+
+Gravity confirms the frame: a level FLU body at rest reads specific force `(0, 0, +9.81)`, and it does. No IMU frame bug.
+
+The gyro answer is the ratio: measured 1.88e-04 against 1.6968e-04 asked, so **gz applies `<stddev>` per sample**. Our SDF put EuRoC *densities* there, so the simulated IMU is quieter than intended by √200 ≈ 14×:
+
+| | Declared to OpenVINS | Actual sim IMU |
+|---|---|---|
+| gyro noise density | 1.6968e-04 | 1.33e-05 (12.8× lower) |
+| accel noise density | 2.0e-03 | 4.70e-04 (4.3× lower) |
+
+Two consequences, and the second is the one that bites:
+
+- The sim IMU is **better than the hardware will ever be**, which is precisely the "sim VIO is misleadingly easy" trap noted above, arriving through a channel nobody was watching.
+- The estimator is told a noise level that does not match its input. A filter given the wrong `R` is not merely conservative; it weights visual against inertial evidence incorrectly.
+
+Fix, as predicted in the SDF's own comment: **`stddev = density × √update_rate`** — gyro `1.6968e-04 × 14.14 = 2.399e-03`, accel `2.0e-03 × 14.14 = 2.828e-02`. Both files must move together, and `kalibr_imu_chain.yaml` says so at the top.
+
+The `dynamic_bias_stddev` terms are untested and presumably carry the same ambiguity; treat them as unverified until measured the same way.
+
+### The estimator could not initialise, and the reason was 20 cm off the ground (2026-09-01)
+
+OpenVINS ran a whole flight against good imagery and produced **zero** output, reporting `[init]: not enough feats to compute disp: 0,0 < 15` throughout and printing `TIME: 9223372036854.775 seconds` at shutdown — `INT64_MAX/1e6`, the state clock never set.
+
+The imagery was not the problem, but proving that took building the right measurement. **The earlier gate measured the wrong quantity.** Block standard deviation is *gradient*; FAST needs a *corner* — a centre pixel differing from a contiguous arc of the 16 around it. Smooth multi-octave noise shades continuously in every direction, so every block looks textured while yielding almost nothing to track. `harness/count_features.py` now asks the question the front end asks, over the same 5×5 grid and `num_pts` budget:
+
+| View | FAST corners @ thresh 20 | cells with features |
+|---|---|---|
+| On the runway, 0.215 m | 18 | 4 / 25 |
+| Airborne | 184 | 23 / 25 |
+
+At 0.215 m the GSD is 0.056 cm/px, so each 1.95 cm ground texel spans ~35 px — the ground texture is sized for the 2.6 cm GSD at 10 m and is a smooth blur up close. OpenVINS' **static** initialiser needs a stationary window *with* trackable features before motion begins. It never got one, and by the time features existed the vehicle was no longer stationary.
+
+Fix: a 2 m × 2 m takeoff pad at 2048 px (0.098 cm/texel), generated alongside the tiles. Verified **before** spending a flight on it — 200 corners in 25/25 cells at ground height, altitude unchanged.
+
+**Dynamic initialisation is not the fix, and its failure mode is worth recognising.** Setting `init_dyn_use: true` does produce a trajectory — 12182 poses where there had been none — and it is wrong: 1398 m off in y, path length 1448 m against 155.9 m of truth, ATE RMSE 400 m, "drift" 101 %. The diagnostic is the *shape* of the error. Altitude stayed bounded (2.7–18.9 m against a true 0.2–10.3 m) while one horizontal axis ran off in a near-straight line at ~23 m/s. Accumulated drift wanders; a constant velocity offset does not. That is a bad initial state, not a bad estimator.
+
+**A negative result worth keeping.** The IMU noise mismatch found the same day looked like a strong candidate for the divergence. Re-running the identical bag with the declared densities corrected to the measured ones moved ATE from 399.5 m to 404.6 m and drift from 100.78 % to 101.09 % — nothing. It was a real bug and not this bug, and only the offline replay made that separable at all.
+
+**Record raw sensors.** `RECORD_SENSORS=1` bags the camera and IMU (~5 GB per 10 minutes). It turns a 25-minute flight into a minutes-long replay, and because the input is byte-identical every time, a change in the output is a change you made rather than the 1.7× timing variance measured on EuRoC. Every estimator conclusion above came from replaying one flight.
+
+### Estimator on sim data: what has been ruled in and out (2026-09-01)
+
+The harness now flies, records, and evaluates end to end, and OpenVINS produces a trajectory. **The trajectory is not yet usable** — 9.4 m ATE, 45 % drift against a EuRoC baseline of 0.72–0.80 %. What follows is the state of the search, because the negative results are worth as much as the fixes.
+
+**The first leg is already EuRoC-class.** Climb plus first 20 m straight: **0.3 m error over 19.5 m, 1.5 %**, altitude tracked to 1 m. So the whole chain — extrinsic, intrinsics, initialisation, scene, IMU — can produce good numbers. Something specific breaks at the **first turn**, after which the estimate keeps travelling in its original direction while truth turns (its y grows 29 → 57 m while truth holds at 19.9 m). That is a failure to register a change of travel direction, not accumulating noise.
+
+**Fixed, each verified by measurement:**
+
+| Change | Effect on ATE |
+|---|---|
+| Static init impossible → high-resolution takeoff pad | never initialised → initialises |
+| 45 s of stationary running before takeoff → 8 s lead-in | 623 m → 10.1 m |
+| `gravity_mag` 9.81 → 9.8, matching the world | 10.1 m → 9.4 m |
+
+Gravity deserves a note: gz's default world gravity is **9.8**, not 9.81, and copying EuRoC's value was a 0.01 m/s² model error. That integrates twice — 3.1 m over 25 s on its own.
+
+**Ruled out, on identical replayed input:**
+
+| Hypothesis | Result |
+|---|---|
+| IMU noise densities wrong | corrected them: 399.5 m → 404.6 m, i.e. nothing |
+| Camera–IMU extrinsic wrong | **verified correct by optical flow** (below) |
+| Feature parameterisation | inverse depth was worse: 9.4 → 9.9 m |
+| Online calibration destabilising | disabling it was far worse: 9.4 → 148.9 m |
+| IMU bias random walk | measured wander 0.009–0.014 m/s² over 40 s; declared values only 2–5× high |
+
+**The extrinsic is now verified, not asserted.** `harness/flow_check.py` measures optical flow against ground-truth velocity. Prediction from the derived transform: flying forward pushes ground features *down* the image, by `2·alt·tan(hfov/2)/width` per frame = 7.4 px at 10 m and 5.8 m/s. Measured: **+7.4 px, direction and magnitude**. With `det = +1` ruling out a mirrored axis, the transform is right. Worth keeping — PROJECT.md calls frame conventions the top risk precisely because a rotated camera yields a plausible *wrong* trajectory rather than an obvious failure.
+
+**That online calibration HELPS by 15× is itself unexplained.** If the supplied extrinsic and intrinsics were exact, freezing them could not hurt. It pointed at the camera model, which measurement then exonerated; it also led to the gravity error, which online calibration had been partially absorbing. Something is still being compensated for.
+
+**Next test, and it is the one this sim was built to answer.** At 10 m altitude the 0.4–6 m obstacle field subtends very little of the view, so the scene is effectively the plane PROJECT.md warned about from the start. Flying the same mission at ~4 m puts genuine 3D structure in frame and halves the GSD. That is a scene change rather than more tuning, and it tests the project's central assumption instead of another parameter.
 
 ---
 
@@ -463,6 +659,7 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 - Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder. Build server will answer definitively.
 - 3D printing is now optional, not blocking — only the camera+IMU bracket needs rigidity and it is hand-cuttable from FR4. Printer purchase deferred until mount iteration actually bottlenecks.
 - Camera works on **Cam0 port only** on Pi 5 per user reports; a missing libcamera tuning JSON in default Raspbian requires vendor support to resolve.
+- Whether gz's `dynamic_bias_stddev` is also per-sample. The white-noise `<stddev>` question is answered (it is); the bias terms were not measured.
 
 ---
 
