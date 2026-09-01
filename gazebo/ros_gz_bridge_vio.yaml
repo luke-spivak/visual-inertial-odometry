@@ -27,10 +27,13 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-# Ground truth for evo. Pose_V carries every link in the world; the estimator
-# is compared against the vio_link entry.
-- ros_topic_name: "/gz/pose_info"
-  gz_topic_name: "/world/iris_runway/dynamic_pose/info"
-  ros_type_name: "tf2_msgs/msg/TFMessage"
-  gz_type_name: "gz.msgs.Pose_V"
+# Ground truth for evo, from the OdometryPublisher attached to the model in the
+# world file. NOT from dynamic_pose/info: gz fills in entity names and a stamp
+# there, but ros_gz_bridge's Pose_V -> TFMessage conversion delivers empty frame
+# ids and stamp 0. That failure is silent -- the bag records thousands of
+# well-formed, useless messages -- so it is worth stating why this topic exists.
+- ros_topic_name: "/gz/ground_truth"
+  gz_topic_name: "/gz/ground_truth"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
   direction: GZ_TO_ROS

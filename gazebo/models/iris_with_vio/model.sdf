@@ -799,8 +799,23 @@
       <fdm_addr>127.0.0.1</fdm_addr>
       <fdm_port_in>9002</fdm_port_in>
       <connectionTimeoutMaxCount>5</connectionTimeoutMaxCount>
+      <!-- These two contradict each other and no_time_sync wins. It arrived by
+           inheritance: iris_with_ardupilot sets no_time_sync to 1
+           upstream (ardupilot_gazebo 65937b7) and this model was copied from it.
+
+           The plugin sends no_time_sync in its JSON; ArduPilot obeys it
+           (SIM_JSON.cpp: "Forcing use_time_sync=0") and then gates lockstep on
+           it: `if (use_time_sync && !state.no_lockstep)`, so lock_step=1
+           does nothing. ArduPilot free-runs, floods the plugin ("Drained n
+           packets: 142"), and Gazebo's clock stops.
+
+           The part that actually matters: with use_time_sync false, ArduPilot
+           sets AHRS_EKF_TYPE=10 by default: the SITL *fake* EKF, which reads
+           state straight from the simulator. Milestones 4 and 5 exist to test
+           what EKF3 does with vision, and against EKF type 10 they would pass
+           while proving nothing. -->
       <lock_step>1</lock_step>
-      <no_time_sync>1</no_time_sync>
+      <no_time_sync>0</no_time_sync>
       <have_32_channels>0</have_32_channels>
 
       <!-- Frame conventions
