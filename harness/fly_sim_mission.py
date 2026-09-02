@@ -17,6 +17,7 @@ Usage: fly_sim_mission.py [--conn tcp:127.0.0.1:5760] [--alt 10] [--side 20]
 """
 import argparse
 import math
+import os
 import sys
 import time
 
@@ -71,10 +72,28 @@ def boot_s(m):
     return None
 
 
+EKF_LOG = None
+
+
 def local_pos(m, timeout=5.0):
     """Latest LOCAL_POSITION_NED as (n, e, d), or None."""
     msg = m.recv_match(type="LOCAL_POSITION_NED", blocking=True, timeout=timeout)
-    return (msg.x, msg.y, msg.z) if msg else None
+    if msg is None:
+        return None
+    if EKF_LOG is not None:
+        EKF_LOG.write(f"{msg.time_boot_ms/1000.0:.3f},{msg.x:.4f},"
+                      f"{msg.y:.4f},{msg.z:.4f}\n")
+    return (msg.x, msg.y, msg.z)
+
+
+class LinkDead(Exception):
+    """The MAVLink connection has gone away.
+
+    Worth its own exception because the failure is silent and expensive: when
+    the peer closes a TCP link, pymavlink's recv_match returns immediately and
+    prints "EOF on TCP socket" every time. A polling loop then spins as fast as
+    the CPU allows. One run wrote 7.4 GB of that line and filled the disk,
+    which took out the flight, the bag and the dataflash log with it."""
 
 
 def wait_for(m, pred, sim_budget, what, wall_budget=None):
@@ -87,11 +106,17 @@ def wait_for(m, pred, sim_budget, what, wall_budget=None):
     expire."""
     wall_budget = wall_budget or max(900.0, sim_budget * 30)
     wall_end = time.time() + wall_budget
-    sim_start, last = None, None
+    sim_start, last, empty = None, None, 0
     while time.time() < wall_end:
         p = local_pos(m)
         if p is None:
+            # recv_match already waited its timeout, so a rapid string of
+            # empties means the link is gone rather than merely quiet.
+            empty += 1
+            if empty > 40:
+                raise LinkDead(f"no MAVLink data while waiting for {what}")
             continue
+        empty = 0
         last = p
         if pred(*p):
             return True
@@ -138,9 +163,30 @@ def main():
     ap.add_argument("--conn", default="tcp:127.0.0.1:5760")
     ap.add_argument("--alt", type=float, default=10.0)
     ap.add_argument("--side", type=float, default=20.0)
+    ap.add_argument("--extnav", action="store_true",
+                    help="Phase 3 milestone 4: configure ExternalNav as the "
+                         "SECONDARY EKF source, keep GPS primary, and align the "
+                         "vision frame to AHRS once airborne")
+    ap.add_argument("--ready-file", metavar="PATH",
+                    help="touch this once the EKF is ready, then wait for "
+                         "--wait-file before arming. Lets the harness start the "
+                         "estimator just before takeoff instead of leaving it "
+                         "running through the whole EKF wait.")
+    ap.add_argument("--wait-file", metavar="PATH",
+                    help="wait for this to appear before arming")
+    ap.add_argument("--ekf-log", metavar="PATH",
+                    help="write LOCAL_POSITION_NED to a CSV for comparison")
     args = ap.parse_args()
 
+    global EKF_LOG
+    if args.ekf_log:
+        EKF_LOG = open(args.ekf_log, "w")
+        EKF_LOG.write("t_boot,n,e,d\n")
+
     print(f"[mission] connecting to {args.conn}", flush=True)
+    # pymavlink writes "EOF on TCP socket" to stdout, uncapped, on every read of
+    # a closed link. Cap the damage regardless of where the loops are.
+    sys.stdout.reconfigure(line_buffering=True)
     m = mavutil.mavlink_connection(args.conn)
     m.wait_heartbeat()
     print(f"[mission] heartbeat from sys {m.target_system}", flush=True)
@@ -160,6 +206,38 @@ def main():
     # observed through messages that are definitely streamed. Whichever arrives
     # first, arming below is the real gate -- ArduPilot refuses until it is
     # genuinely happy, so this wait only avoids burning the arm retries.
+    if args.extnav:
+        # GPS stays PRIMARY. The whole point of this milestone is that a frame
+        # error shows up as disagreement between two sources rather than as the
+        # aircraft leaving; SRC2 is configured but not selected.
+        print("[mission] configuring ExternalNav as secondary source", flush=True)
+        # 2 = IntelT265, NOT 1 = MAVLink, and the reason is yaw alignment.
+        # Both backends consume the same VISION_POSITION_ESTIMATE via the same
+        # handle_pose_estimate() signature, but request_align_yaw_to_ahrs() is
+        # overridden ONLY in AP_VisualOdom_IntelT265; in the base class, which
+        # the MAVLink backend uses, it is an empty virtual. So under VISO_TYPE=1
+        # a VISODOM_ALIGN silently aligns POSITION ONLY.
+        #
+        # Measured, with type 1: vision and EKF agreed to 0.14-0.29 m through
+        # the entire climb, then diverged the moment the vehicle translated --
+        # vision read -12.91 East where truth was +12.14 North. Same magnitude,
+        # frame rotated 90 degrees, because OpenVINS' heading is arbitrary and
+        # nothing had corrected it.
+        #
+        # The T265 backend applies no T265-specific transform to our data:
+        # VISO_ORIENT defaults to ROTATION_NONE and VISO_SCALE to 1.0, and the
+        # VOXL reset-jump handling is inert while the reset counter stays 0.
+        wait_param(m, "VISO_TYPE", 2)          # 2 = IntelT265 (yaw align works)
+        wait_param(m, "VISO_DELAY_MS", 50)
+        wait_param(m, "VISO_POS_M_NSE", 0.3)
+        wait_param(m, "EK3_SRC2_POSXY", 6)     # 6 = EXTNAV
+        wait_param(m, "EK3_SRC2_POSZ", 6)
+        wait_param(m, "EK3_SRC2_VELXY", 0)     # position only to start with
+        # Yaw stays on the compass. Vision yaw is the least trustworthy part of
+        # a monocular estimate and letting it drive heading confuses a frame
+        # error with an estimator error, which is the opposite of the point.
+        wait_param(m, "EK3_SRC2_YAW", 1)
+
     print("[mission] waiting for EKF position estimate", flush=True)
     need = (mavutil.mavlink.EKF_POS_HORIZ_ABS | mavutil.mavlink.EKF_PRED_POS_HORIZ_ABS)
     wall_end = time.time() + 1200
@@ -206,6 +284,28 @@ def main():
         return 1
     print(f"[mission] AHRS_EKF_TYPE={ekf_type}", flush=True)
 
+    # Hand off to the harness: it starts the estimator now, and we do not arm
+    # until it says it is up. A fixed sleep cannot work here -- the two sides
+    # measure time differently, the harness in wall clock and this script in sim
+    # time, and their ratio is whatever the renderer manages that run.
+    #
+    # This matters more than it looks. The estimator has no parallax while the
+    # vehicle sits still, so MSCKF features never triangulate and it propagates
+    # on IMU alone. Running it through the full 45 s EKF wait cost 623 m of ATE
+    # against 10 m when it started shortly before takeoff.
+    if args.ready_file:
+        open(args.ready_file, "w").close()
+        print(f"[mission] signalled EKF ready -> {args.ready_file}", flush=True)
+    if args.wait_file:
+        print("[mission] waiting for the estimator", flush=True)
+        deadline = time.time() + 300
+        while time.time() < deadline and not os.path.exists(args.wait_file):
+            m.recv_match(blocking=True, timeout=1)
+        if not os.path.exists(args.wait_file):
+            print("[mission] estimator never signalled ready", file=sys.stderr)
+            return 1
+        print("[mission] estimator up", flush=True)
+
     if not set_mode(m, "GUIDED"):
         print("[mission] FAILED to enter GUIDED", file=sys.stderr)
         return 1
@@ -225,6 +325,28 @@ def main():
                     f"climb to {args.alt} m"):
         return 1
 
+    if args.extnav:
+        # VISODOM_ALIGN (aux function 80) sets the vision frame's yaw and
+        # position offset from AHRS. It must happen while vision is NOT the
+        # position source -- AP_VisualOdom says so in as many words -- so here,
+        # hovering on GPS, is the right moment. Without it the vision stream is
+        # rotated by OpenVINS' arbitrary initial heading: its frame is gravity-
+        # aligned, but nothing makes its x-axis point north.
+        print("[mission] VISODOM_ALIGN", flush=True)
+        m.mav.command_long_send(
+            m.target_system, m.target_component,
+            mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION, 0,
+            80,   # VISODOM_ALIGN
+            2,    # switch position high
+            0, 0, 0, 0, 0)
+        ack = m.recv_match(type="COMMAND_ACK", blocking=True, timeout=5)
+        if ack and ack.command == mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION:
+            print(f"[mission] align ack result={ack.result}", flush=True)
+        else:
+            print("[mission] no ack for VISODOM_ALIGN", file=sys.stderr)
+        # Let the alignment settle before translating.
+        wait_for(m, lambda n, e, d: False, 5, "align settle")
+
     # Square, then a diagonal. Translation in several directions gives the
     # estimator observability it will not get from a pure hover.
     d = -args.alt
@@ -236,9 +358,15 @@ def main():
     print("[mission] landing", flush=True)
     set_mode(m, "LAND")
     wait_for(m, lambda n, e, d: d > -0.4, 120, "touchdown")
+    if EKF_LOG is not None:
+        EKF_LOG.close()
     print("[mission] done", flush=True)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except LinkDead as e:
+        print(f"[mission] {e} -- did SITL exit? check sitl.log", file=sys.stderr)
+        sys.exit(2)

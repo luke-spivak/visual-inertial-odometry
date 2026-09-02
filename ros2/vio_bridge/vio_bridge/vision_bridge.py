@@ -20,7 +20,16 @@ class BridgeNode(Node):
             self.on_odom,
             10, 
         )
-        self.mav = mavutil.mavlink_connection('udpout:127.0.0.1:14550', source_system=1, source_component=191)
+        # Endpoint is a parameter because it differs per target and the wrong
+        # one fails silently -- the node runs, packets leave, and ArduPilot
+        # never sees them. Under sim_vehicle.py --no-mavproxy nothing listens on
+        # 14550 at all (--out is a MAVProxy argument and is ignored), but SITL
+        # serves SERIAL1/SERIAL2 as TCP servers on 5762/5763. On hardware this
+        # becomes the Pi's serial device, e.g. /dev/serial0,921600.
+        self.declare_parameter('mavlink_url', 'udpout:127.0.0.1:14550')
+        url = self.get_parameter('mavlink_url').get_parameter_value().string_value
+        self.get_logger().info(f'MAVLink out: {url}')
+        self.mav = mavutil.mavlink_connection(url, source_system=1, source_component=191)
         self._min_period_us = 1_000_000 // 30   # 30 Hz out; odomimu arrives at ~200 Hz
         self._last_sent_us = 0
         return
