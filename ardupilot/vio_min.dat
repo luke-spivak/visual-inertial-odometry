@@ -1,0 +1,5 @@
+# Minimum for GPS-denied VIO on a 1 MB F405: vision in, EKF3 able to fuse it.
+# Both are gated on HAL_PROGRAM_SIZE_LIMIT_KB > 1024 in the ArduPilot sources,
+# so a 1024 KB board gets neither by default.
+define HAL_VISUALODOM_ENABLED 1
+define EK3_FEATURE_EXTERNAL_NAV 1

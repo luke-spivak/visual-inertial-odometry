@@ -1,0 +1,8 @@
+# As vio_min, plus the rangefinder the build plan calls for. The Benewake serial
+# drivers are already enabled by minimize_fpv_osd.inc; this makes the frontend
+# explicit so the cost is attributable rather than assumed.
+define HAL_VISUALODOM_ENABLED 1
+define EK3_FEATURE_EXTERNAL_NAV 1
+define AP_RANGEFINDER_ENABLED 1
+define AP_RANGEFINDER_BENEWAKE_TFMINI_ENABLED 1
+define AP_RANGEFINDER_BENEWAKE_TFMINIPLUS_ENABLED 1

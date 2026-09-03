@@ -1,0 +1,5 @@
+variant	flash_used_B	flash_free_B	delta_vs_stock_B	builds
+stock	888492	110920	0	yes
+vio_min	899516	99896	11024	yes
+vio_full	899524	99888	11032	yes
+vio_optflow	926484	72928	37992	yes

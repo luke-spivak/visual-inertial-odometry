@@ -20,7 +20,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | Camera purchased — Pi now available, not yet started |
-| ArduPilot transition | Firmware constraint confirmed, build not yet generated |
+| ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
 | Evaluation | Blocked |
@@ -286,6 +286,53 @@ AP_COMPASS_RM3100_ENABLED  AP_COMPASS_BMM150_ENABLED   # only !QMC5883P is exclu
 The build server fails if the feature set doesn't fit, so the test is empirical.
 
 **Consequence for architecture:** the F405 is the ceiling, not the Pi. Treat ArduCopter as a stabilization and setpoint-tracking layer, drive it with Guided-mode setpoints from the Pi over MAVLink, and keep all autonomy on Linux where there's no flash constraint. This is also how production systems are built.
+
+### The 1 MB firmware question, answered by building it (2026-09-03)
+
+`custom.ardupilot.org` is a web form; the question here is quantitative, so the
+build was done locally against the `~/ardupilot` checkout already on the sim VM
+(4.6.0-beta1+8209, the same tree SITL runs). `ardupilot/build_speedybeef4v4.sh`
+reproduces it; the feature sets are the `.dat` files beside it.
+
+The board declares `FLASH_SIZE_KB 1024` with `FLASH_RESERVE_START_KB 48`, so the
+application has ~976 KB. waf reports free flash against that, and an over-large
+build fails outright with `region 'flash' overflowed` rather than truncating.
+
+| variant | flash used | free | vs stock | builds |
+|---|---|---|---|---|
+| stock `speedybeef4v4` | 888,492 B | 110,920 B | — | yes |
+| **+ visual odom + EKF3 external nav** | 899,516 B | **99,896 B** | **+11,024 B** | yes |
+| + rangefinder frontend explicit | 899,524 B | 99,888 B | +11,032 B | yes |
+| + full optical flow stack | 926,484 B | 72,928 B | +37,992 B | yes |
+
+**Everything this project needs fits, with 98 KB to spare.** Visual odometry and
+external nav together cost 11 KB — about 1 % of flash.
+
+**The real constraint was never flash, and the note this file carried was
+misleading about which.** Both features are compiled out on this board by
+*source default*, not by anything in the board's hwdef:
+
+```
+HAL_VISUALODOM_ENABLED     HAL_PROGRAM_SIZE_LIMIT_KB > 1024
+EK3_FEATURE_EXTERNAL_NAV   EK3_FEATURE_ALL || HAL_PROGRAM_SIZE_LIMIT_KB > 1024
+```
+
+`1024 > 1024` is false, so a 1 MB board gets neither — regardless of how much
+room is actually left. Confirmed against the stock build: no `VISO_` parameters.
+A custom build is required, but for a threshold reason, not a capacity one.
+
+**The rangefinder is free.** `minimize_fpv_osd.inc`, which this board includes,
+sets `AP_RANGEFINDER_BACKEND_DEFAULT_ENABLED 0` and then re-enables the Benewake
+TF02 / TF03 / TFMINI / TFMINIPLUS drivers explicitly. The TF-Luna's driver is
+already in the stock firmware; making the frontend explicit cost 8 bytes.
+
+**And the optical-flow rejection needs correcting.** The Rejected options table
+gave two reasons for dropping the Matek 3901-L0X, and the first was flash:
+"four features to re-enable, all competing for flash needed by external nav."
+They do not compete — all four build alongside external nav with 71 KB still
+free. The second reason (low-altitude-only, contributes nothing at cruise) is
+untouched by this and is sufficient on its own, so the decision stands; but it
+should stand on the reason that is true.
 
 ### Weight and thrust budget
 
@@ -1278,7 +1325,7 @@ obstacle field removed.
 | BNO085 | Sensor fusion chip — see derivation above |
 | ~~Matek M10Q-5883~~ | **Un-rejected.** QMC5883L is enabled in stock firmware; only the QMC5883P successor is out, and that is fixable in the custom build |
 | CanaKit Pi 4 Starter Kit (B07V5JTMV9) | Wrong generation (~half the CPU throughput), single 15-pin CSI kills the stereo upgrade path, kit contents are wall PSU / case / HDMI you won't use |
-| Optical flow (3901-L0X) | Four features to re-enable, competing with external nav for flash |
+| Optical flow (3901-L0X) | ~~Four features to re-enable, competing with external nav for flash~~ — **the flash premise is refuted (2026-09-03): all four fit alongside external nav with 71 KB spare.** The decision stands on the other stated ground only: it is low-altitude-only and contributes nothing at cruise |
 
 ---
 
@@ -1301,7 +1348,7 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 
 - Airframe condition unknown — cracked arms, damaged ESC FETs, and bent motor shafts are all live possibilities. Triage gates everything.
 - Battery capacity, connector, and health unverified (cell count confirmed 4S).
-- Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder. Build server will answer definitively.
+- ~~Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder~~ — **answered 2026-09-03 by building it: yes, with 98 KB to spare.** See below. The binding constraint was never flash; it is that both features are compiled out by *source default* on a 1024 KB board.
 - 3D printing is now optional, not blocking — only the camera+IMU bracket needs rigidity and it is hand-cuttable from FR4. Printer purchase deferred until mount iteration actually bottlenecks.
 - Camera works on **Cam0 port only** on Pi 5 per user reports; a missing libcamera tuning JSON in default Raspbian requires vendor support to resolve.
 - Whether gz's `dynamic_bias_stddev` is also per-sample. The white-noise `<stddev>` question is answered (it is); the bias terms were not measured.
