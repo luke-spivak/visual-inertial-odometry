@@ -422,7 +422,30 @@ def main():
         wait_param(m, "VISO_DELAY_MS", 50)
         wait_param(m, "VISO_POS_M_NSE", 0.3)
         wait_param(m, "EK3_SRC2_POSXY", 6)     # 6 = EXTNAV
-        wait_param(m, "EK3_SRC2_POSZ", 6)
+        # ALTITUDE STAYS ON THE BAROMETER (1), not ExternalNav.
+        #
+        # This was 6 (EXTNAV), and it crashed the aircraft. Ground truth from
+        # the flight that found it: the vehicle reaches its waypoint at 10.35 m
+        # and is nearly stationary, the source set switches, and 0.4 s later it
+        # is descending -- 10.07, 9.25, 8.09, 6.92, 5.91, 5.00, 4.15, 3.34, 2.52
+        # -- building to 9.5 m/s with roll and pitch swinging past 60 and 78 deg
+        # before it hits the ground 5 s after the switch and lies there at a
+        # 68 deg angle.
+        #
+        # The estimator then "diverged" to 11 km, which is what an MSCKF does
+        # when its camera is face down in the dirt. Two GPS-denied flights were
+        # scored as estimator failures on that basis before ground truth was
+        # actually read: the divergence was a CONSEQUENCE of the crash, not its
+        # cause.
+        #
+        # Vision altitude is the weakest channel this system has -- a monocular
+        # filter's z is the axis with the least parallax support, and the
+        # measured vertical error was 1.77 m mean / 3.27 m max even on a flight
+        # that survived. Handing the altitude controller that signal at the
+        # moment of a source switch is asking for a step input. Baro has none of
+        # those problems, is ArduPilot's own default for POSZ, and costs nothing.
+        # Horizontal position is what this milestone is actually testing.
+        wait_param(m, "EK3_SRC2_POSZ", 1)      # 1 = Baro
         wait_param(m, "EK3_SRC2_VELXY", 0)     # position only to start with
         # Yaw stays on the compass. Vision yaw is the least trustworthy part of
         # a monocular estimate and letting it drive heading confuses a frame

@@ -6,7 +6,9 @@ Build a monocular visual-inertial odometry system on a 5-inch quadcopter that ca
 
 Secondary objective: the sim harness and evaluation framework are reusable for any estimator, and are arguably more valuable than the specific VIO implementation.
 
-**Status of the number, in simulation (2026-09-03): 2.29 % median drift over three flights, 1.91–2.89 % across nine estimator runs, ATE 0.31–0.42 m over a 155 m mission at 96 % coverage.** That is the sim figure and it meets the < 5 % gate. It is not the deliverable: the deliverable is this number on hardware, against measured ground truth, and the sim's own GPS-denied test still fails two flights in three.
+**Status of the number, in simulation (2026-09-03).** Estimator, open loop: **2.29 % median drift over three flights, 1.91–2.89 % across nine runs, ATE 0.31–0.42 m over 155 m at 96 % coverage.** Aircraft, GPS-denied closed loop: **0.38–1.73 % net drift, 3/3 flights**, with peak mid-flight excursions of 10–13 m. Both meet the < 5 % gate; the peak excursion does not, and it is the number that would matter near obstacles.
+
+Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deliverable is this number on hardware against measured ground truth, and the sim flatters the front end in every way PROJECT.md already lists — perfect global shutter, no motion blur, no vibration, exact timestamps — plus two more found here: the mission is a closed circuit that re-observes its own features, and the 3D obstacle field turns out to contribute nothing that a textured plane does not.
 
 ---
 
@@ -16,11 +18,11 @@ Secondary objective: the sim harness and evaluation framework are reusable for a
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
-| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across nine runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 is implemented and FAILS: one GPS-denied flight in three held, two flew away** — closed-loop stability is the open problem |
+| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across nine runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | Camera purchased — Pi now available, not yet started |
 | ArduPilot transition | Firmware constraint confirmed, build not yet generated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
-| Vision in the loop | **Sim: works, but not reliably.** Vision reaches EKF3 with correct frames (milestone 4) and has flown 155 m GPS-denied to a 1.39 m final error — once in three attempts. The other two diverged. Closed-loop stability, not accuracy, is the open problem |
+| Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
 | Evaluation | Blocked |
 
 ---
@@ -372,7 +374,7 @@ TF-Luna on I2C rather than serial specifically to free a UART. Verify exact UART
 2. Camera and IMU topics at sane rates with correct timestamps
 3. VIO produces a trajectory, logged only, compared to Gazebo truth via `evo`
 4. **VIO into ArduPilot with GPS still on** — the milestone that matters most; free frame-convention checking
-5. GPS disabled mid-flight, EKF3 holds position on vision alone — **implemented and measured 2026-09-03; does NOT pass. One flight in three held (155 m denied, 1.39 m final error); two diverged, OpenVINS reaching 78 km and 140 km. See below.**
+5. GPS disabled mid-flight, EKF3 holds position on vision alone — **done 2026-09-03. 3/3 flights complete the mission denied, net drift 0.38–1.73 % of distance flown on vision. Needed fixed yaw AND altitude back on the barometer; vision driving the altitude controller was crashing the aircraft.**
 6. Headless batch runs across altitude/speed/texture, ATE and RPE out — **done 2026-09-03, `harness/sweep.sh`; results below**
 
 **ROS 2 launch arguments silently override YAML.** `subscribe.launch.py` always passes `max_cameras`, `use_stereo`, and `save_total_state` as ROS parameters, using its own defaults when not specified — and ROS parameters beat config-file values. A mono config with `max_cameras: 1` still tries to load `cam1` and dies with "unable to parse all parameters". Launch the sim config as:
@@ -1024,10 +1026,73 @@ this same evaluation path. On that metric this system reads 15.4–16.0 % and th
 < 5 % gate is not met. The measurements above explain the *character* of the
 error; they do not turn a 16 % into a 5 %.
 
-### Milestone 5: GPS denied mid-flight — and it is NOT reliable (2026-09-03)
+### Milestone 5: GPS denied mid-flight — done, after two fixes (2026-09-03)
 
-**Result: one flight in three held; two diverged catastrophically. Milestone 5
-is implemented and measured, and it does not pass.**
+**Result: 3 of 3 flights complete the GPS-denied mission, with net drift
+0.38–1.73 % of the distance flown on vision alone. Milestone 5 passes.** Getting
+there took two fixes and, more importantly, one corrected misdiagnosis: the
+first six attempts were scored as estimator divergences and half of them were
+not.
+
+| configuration | held | net drift | peak excursion |
+|---|---|---|---|
+| default yaw, altitude from vision | **1 / 3** | — | — |
+| fixed yaw, altitude from vision | **2 / 3** | — | — |
+| fixed yaw, **altitude from baro** | **3 / 3** | 0.38 / 1.35 / 1.73 % | 1.04 / 5.33 / 7.94 % |
+
+Final flights, denied while translating and flying the remaining square and both
+diagonals on vision:
+
+| flight | distance denied | mean err | max err | final err |
+|---|---|---|---|---|
+| m5g_a | 193.8 m | 3.36 m | 10.34 m | 3.35 m |
+| m5g_b | 117.8 m | 0.57 m | 1.23 m | 0.44 m |
+| m5g_c | 167.0 m | 5.28 m | 13.27 m | 2.25 m |
+
+Net drift — where the aircraft actually ends up relative to where it thinks it
+is — is 0.38–1.73 %, comfortably inside the < 5 % gate. **Peak excursion is not:**
+10–13 m mid-flight on two of three flights, 5.3 % and 7.9 % of distance. That is
+an operational limit worth stating plainly — this system should not be flown
+GPS-denied within ~15 m of anything solid, even though it comes home accurately.
+
+Note the denied distance varies 118–194 m against a nominal 118 m: a vehicle
+correcting a drifting estimate flies further than the mission asks, which
+inflates the denominator. m5g_b, the best of the three, is also the one that flew
+the nominal distance.
+
+#### The fix that mattered most: vision was flying the altitude controller
+
+`EK3_SRC2_POSZ` was 6 (ExternalNav), so on switching source sets the altitude
+controller was handed a monocular filter's z estimate. **It crashed the
+aircraft.** Ground truth from the flight that found it — the vehicle reaches its
+waypoint at 10.35 m, nearly stationary, the source set switches, and 0.4 s later:
+
+```
+t=79.3  z=10.07   t=80.5  z=6.92   t=81.7  z=4.15   t=83.3  roll +16.8  pitch -24.3
+t=79.7  z= 9.25   t=80.9  z=5.91   t=82.1  z=3.34   t=83.8  roll +61.5  pitch -78.2
+t=80.1  z= 8.09   t=81.3  z=5.00   t=82.5  z=2.52   t=84.2  z=0.21, motionless, pitch -68.5
+```
+
+Five seconds from the switch to lying in the dirt at a 68° angle. The estimator
+then "diverged" to 11 km — which is what an MSCKF does when its camera is face
+down on the ground.
+
+**Two flights had already been recorded in this file as estimator failures on
+exactly that evidence.** The divergence was a *consequence* of the crash, and
+nobody had read the ground-truth attitude. `z` is the weakest axis a monocular
+filter has, the measured vertical error was 1.77 m mean / 3.27 m max even on a
+flight that survived, and handing that to an altitude controller at the instant
+of a source switch is a step input. Baro is ArduPilot's own default for POSZ,
+costs nothing, and is not what this milestone is testing. With it: vertical error
+drops to 0.73 m mean and nothing crashes.
+
+**The methodological lesson, which is the expensive one.** "The estimator
+diverged" was true and useless. The estimator diverges whenever the vehicle is
+broken, so it is the *last* thing to conclude from, not the first — and checking
+took one query against data already on disk. Worse: the superseded runs were
+deleted to free space before the crash mechanism was understood, so the
+retrospective check on those two flights is no longer possible. **Do not delete a
+run whose failure has been explained by inference rather than by measurement.**
 
 The test is deliberately harder than the milestone's wording. "Holds position on
 vision alone" invites a hover, and a hover is nearly free — drift is a fraction
@@ -1071,8 +1136,15 @@ chasing waypoints it could not reach. ArduPilot logged repeated
 `EKF3 lane switch` / `primary changed` — both lanes unhappy, no healthy
 alternative to switch to.
 
-**The finding that matters: open-loop stability does not imply closed-loop
-stability.** The identical estimator configuration, replayed offline against
+**A finding that survives the correction: open-loop stability does not imply
+closed-loop stability.** It is weaker than it looked — most of the closed-loop
+failures were crashes — but it is not empty: one diverged flight was replayed
+offline from its own recording and diverged there too, ruling out live CPU
+contention as the explanation. The remainder of this note is kept because the
+distinction still holds, and because the CPU hypothesis is now measured rather
+than assumed.
+
+**The original, partly superseded reasoning:** The identical estimator configuration, replayed offline against
 recorded flights, is stable every time — nine replays across three recordings,
 spread 1.01–1.04×. Put it in the loop and it diverges two flights in three. Two
 mechanisms are available and are not yet separated:
