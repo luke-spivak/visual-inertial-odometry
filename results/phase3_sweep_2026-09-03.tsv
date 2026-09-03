@@ -1,7 +1,7 @@
-name	settings	path_m	drift_med	drift_min	drift_max	ate_med	coverage
-base_a10	MISSION_ALT=10	156.2	14.64	14.01	14.68	1.97	96
-alt6	MISSION_ALT=6	148.0	32.17	32.10	40.56	7.48	96
-fixedyaw	MISSION_ALT=10 FIXED_YAW=1	155.3	1.91	1.91	2.19	0.31	96
-fixedyaw_b	MISSION_ALT=10 FIXED_YAW=1	155.4	2.29	2.08	2.30	0.42	96
-fixedyaw_c	MISSION_ALT=10 FIXED_YAW=1	155.4	2.72	2.55	2.89	0.39	96
-flat_ctrl	MISSION_ALT=10 FIXED_YAW=1 WORLD=iris_flat_vio.sdf	155.0	1.85	1.85	1.88	0.38	96
+name	settings	path_m	n	drift_med	drift_min	drift_max	ate_med	coverage
+base_a10	MISSION_ALT=10	156.2	3	14.64	14.01	14.68	1.97	96
+alt6	MISSION_ALT=6	148.0	3	32.17	32.10	40.56	7.48	96
+fixedyaw	MISSION_ALT=10 FIXED_YAW=1	155.3	3	1.91	1.91	2.19	0.31	96
+fixedyaw_b	MISSION_ALT=10 FIXED_YAW=1	155.4	3	2.29	2.08	2.30	0.42	96
+fixedyaw_c	MISSION_ALT=10 FIXED_YAW=1	155.4	2	2.72	2.55	2.89	0.39	96
+flat_ctrl	MISSION_ALT=10 FIXED_YAW=1 WORLD=iris_flat_vio.sdf	155.0	3	1.85	1.85	1.88	0.38	96

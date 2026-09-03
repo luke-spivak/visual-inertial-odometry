@@ -6,7 +6,7 @@ Build a monocular visual-inertial odometry system on a 5-inch quadcopter that ca
 
 Secondary objective: the sim harness and evaluation framework are reusable for any estimator, and are arguably more valuable than the specific VIO implementation.
 
-**Status of the number, in simulation (2026-09-03).** Estimator, open loop: **2.29 % median drift over three flights, 1.91–2.89 % across nine runs, ATE 0.31–0.42 m over 155 m at 96 % coverage.** Aircraft, GPS-denied closed loop: **0.38–1.73 % net drift, 3/3 flights**, with peak mid-flight excursions of 10–13 m. Both meet the < 5 % gate; the peak excursion does not, and it is the number that would matter near obstacles.
+**Status of the number, in simulation (2026-09-03).** Estimator, open loop: **2.29 % median drift over three flights, 1.91–2.89 % across eight runs, ATE 0.31–0.42 m over 155 m at 96 % coverage.** Aircraft, GPS-denied closed loop: **0.38–1.73 % net drift, 3/3 flights**, with peak mid-flight excursions of 10–13 m. Both meet the < 5 % gate; the peak excursion does not, and it is the number that would matter near obstacles.
 
 Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deliverable is this number on hardware against measured ground truth, and the sim flatters the front end in every way PROJECT.md already lists — perfect global shutter, no motion blur, no vibration, exact timestamps — plus two more found here: the mission is a closed circuit that re-observes its own features, and the 3D obstacle field turns out to contribute nothing that a textured plane does not.
 
@@ -18,7 +18,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
-| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across nine runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
+| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | Camera purchased — Pi now available, not yet started |
 | ArduPilot transition | Firmware constraint confirmed, build not yet generated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
@@ -1183,13 +1183,18 @@ varies alone:
 | `alt6` — 6 m, default yaw | 148.0 m | 32.17 % (32.10–40.56) | 7.48 m | 96 % |
 | `fixedyaw` — 10 m, `WP_YAW_BEHAVIOR=0` | 155.3 m | **1.91 % (1.91–2.19)** | **0.31 m** | 96 % |
 | `fixedyaw_b` — repeat flight | 155.4 m | **2.29 % (2.08–2.30)** | 0.42 m | 96 % |
-| `fixedyaw_c` — repeat flight | 155.4 m | **2.72 % (2.55–2.89)** | 0.39 m | 96 % |
+| `fixedyaw_c` — repeat flight | 155.4 m | **2.72 % (2.55–2.89), n=2** | 0.39 m | 96 % |
 | `flat_ctrl` — fixed yaw, **no obstacles at all** | 155.0 m | **1.85 % (1.85–1.88)** | 0.38 m | 96 % |
 
-Every row is three replays of one recorded flight; the three `fixedyaw` rows are
-three separate FLIGHTS, so the headline carries both kinds of variance —
-replay-to-replay and flight-to-flight. Nine estimator runs across three flights
-span 1.91–2.89 %. Every row covers 96 % of its flight, and the coverage column is
+Each row is three replays of one recorded flight — **except `fixedyaw_c`, which
+is two**: one replay hit `[init]: failed static init: platform moving too much`
+and produced no trajectory at all. That is the initialiser's known
+nondeterminism (it runs on a background thread) on data its two siblings handled
+fine, not a property of the flight. The `n` column exists because the first
+version of this table did not have one, and a two-replay row was written up as
+three. The three `fixedyaw` rows are three separate FLIGHTS, so the headline
+carries both kinds of variance — replay-to-replay and flight-to-flight. **Eight
+estimator runs across three flights span 1.91–2.89 %.** Every row covers 96 % of its flight, and the coverage column is
 there because a truncated estimate scores better: the comparison is only
 meaningful because the spans match.
 
@@ -1206,7 +1211,7 @@ and the flat world would have done as well.
 
 **Against the reference points this project set itself:** OpenVINS on EuRoC
 V1_01_easy gives 0.72–0.80 %/10 m and 0.067–0.115 m ATE over 58 m. This is
-**2.29 % median over three flights (1.91–2.89 % across nine runs)** and
+**2.29 % median over three flights (1.91–2.89 % across eight runs)** and
 0.31–0.42 m ATE over 155 m. Same order of magnitude, on a longer flight, from a
 simulated quadrotor. **The < 5 % gate for Phase 3 step 5 is met.**
 

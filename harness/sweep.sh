@@ -68,7 +68,12 @@ bash "$HOME/vio_gazebo/worlds/make_scene.sh" "$MIN_ALT"
 echo
 
 RESULTS="$OUT/results.tsv"
-[ -f "$RESULTS" ] || printf 'name\tsettings\tpath_m\tdrift_med\tdrift_min\tdrift_max\tate_med\tcoverage\n' > "$RESULTS"
+# n is NOT optional. A replay can fail -- OpenVINS initialises on a background
+# thread and "failed static init: platform moving too much" happens
+# nondeterministically on perfectly good data -- and replay_repeats.sh correctly
+# reports "n=2" when it does. Dropping that column here is how a two-replay row
+# gets read, written up and committed as three. Observed on fixedyaw_c.
+[ -f "$RESULTS" ] || printf 'name\tsettings\tpath_m\tn\tdrift_med\tdrift_min\tdrift_max\tate_med\tcoverage\n' > "$RESULTS"
 
 printf '%s\n' "$CONFIGS" | while read -r NAME REST; do
   [ -n "$NAME" ] || continue
@@ -123,14 +128,20 @@ def f(v, fmt="{:.2f}"):
     return fmt.format(v) if v else "nan"
 with open(results, "a") as fh:
     fh.write("\t".join([
-        name, rest or "-", path,
+        name, rest or "-", path, str(len(d)),
         f(st.median(d) if d else 0), f(min(d) if d else 0), f(max(d) if d else 0),
         f(st.median(a) if a else 0),
         f(min(c) if c else 0, "{:.0f}"),
     ]) + "\n")
-print(f"   {name}: drift median {st.median(d):.2f} % "
-      f"(min {min(d):.2f}, max {max(d):.2f}), ATE {st.median(a):.2f} m"
-      if d else f"   {name}: no drift numbers parsed")
+if d:
+    print(f"   {name}: drift median {st.median(d):.2f} % "
+          f"(min {min(d):.2f}, max {max(d):.2f}) over n={len(d)}, "
+          f"ATE {st.median(a):.2f} m")
+    if len(d) < len(rows):
+        print(f"   *** {len(rows) - len(d)} of {len(rows)} replays produced no "
+              f"result -- this row is backed by {len(d)}, not {len(rows)} ***")
+else:
+    print(f"   {name}: no drift numbers parsed")
 PY
 
   # Reclaim the recording; the trajectories and eval output are what matter.
