@@ -7,17 +7,36 @@ integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then a
 use_stereo: false # if we have more than 1 camera, if we should try to track stereo constraints between pairs
 max_cameras: 1 # how many cameras we have 1 = mono, 2 = stereo, >2 = binocular (all mono tracking)
 
-# Online calibration ON, and the measurement says to keep it on: turning it off
-# took ATE from 10.1 m to 148.9 m on identical input. That is diagnostic rather
-# than a preference -- if the supplied extrinsic and intrinsics were exact,
-# freezing them could not hurt. Something in the camera-IMU transform is wrong
-# and the filter has been partially absorbing it. See the flow check below.
+# Online calibration ON, but the reason recorded here previously was wrong and
+# is worth correcting rather than deleting.
+#
+# The old note said freezing calibration took ATE from 10.1 m to 148.9 m, and
+# read that as evidence that something in the camera-IMU transform was wrong and
+# being absorbed. Re-measured on the 10 m structured flight after the chi-squared
+# gate was fixed: freezing all three gives 97.44 % drift against a 97.83-99.39 %
+# baseline -- no effect at all. The earlier 15x was a real measurement of a
+# different configuration (before the gravity fix, on a different scene), and it
+# pointed at a problem that was never there.
+#
+# So this is now a preference, not a finding. Kept ON because it costs nothing
+# here and because on HARDWARE the intrinsics and extrinsic genuinely will be
+# imperfect. In simulation there is nothing to calibrate -- the camera is an
+# exact pinhole with zero distortion -- and it shows: fx wandered from an exactly
+# correct 381.347 to 385.82 and cx from 320 to 313.7 over one flight, which is
+# the filter fitting noise. Freeze all three if a sim result ever needs to be
+# free of that.
 calib_cam_extrinsics: true # if the transform between camera and IMU should be optimized R_ItoC, p_CinI
 calib_cam_intrinsics: true # if camera intrinsics should be optimized (focal, center, distortion)
 calib_cam_timeoffset: true # if timeoffset between camera and IMU should be optimized
 calib_imu_intrinsics: false # if imu intrinsics should be calibrated (rotation and skew-scale matrix)
 calib_imu_g_sensitivity: false # if gyroscope gravity sensitivity (Tg) should be calibrated
 
+# 11 clones at the measured 15.2 Hz update rate spans 0.72 s, and the mission
+# settles 0.5-0.8 s at every waypoint -- so the whole window can collapse onto
+# stationary poses, which is the monocular degeneracy in its purest form. That
+# looked like the explanation and is not: widening the window to straddle the
+# stop (20 clones = 1.3 s, 30 = 2.0 s) gave 97.6 % and 95.6 % against a 97.8 %
+# baseline. Recorded because the arithmetic is seductive and the answer is no.
 max_clones: 11 # how many clones in the sliding window
 max_slam: 50 # number of features in our state vector
 max_slam_in_update: 25 # update can be split into sequential updates of batches, how many in a batch
@@ -171,12 +190,20 @@ filepath_gt: "/tmp/ov_sim_groundtruth.txt"
 # our front-end feature tracking parameters
 # we have a KLT and descriptor based (KLT is better implemented...)
 use_klt: true # if true we will use KLT, otherwise use a ORB descriptor + robust matching
+# 200, and MORE IS WORSE: 400 points with max_slam 75, on the same recorded
+# flight and with the gate already opened, took drift from 16.0 % to 102.2 %.
+# The extra features are the marginal ones, and a loosened gate admits them.
 num_pts: 200 # number of points (per camera) we will extract and try to track
 fast_threshold: 20 # threshold for fast extraction (warning: lower threshs can be expensive)
 grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking)
 grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
 min_px_dist: 10 # distance between features (features near each other provide less information)
 knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
+# 21 against a 30.3 Hz camera means OpenVINS keeps every SECOND frame -- the
+# effective tracking rate is 15.2 Hz, measured, not 21. Keeping every frame
+# (31.0) halves inter-frame motion to ~7.4 px and was tried for exactly that
+# reason: it did not help (16.3 % against 16.0 %), and at sigma_px 2 it was much
+# worse (63.3 %). Left at 21 because it is cheaper and no worse.
 track_frequency: 21.0 # frequency we will perform feature tracking at (in frames per second / hertz)
 downsample_cameras: false # will downsample image in half if true
 num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads
@@ -191,11 +218,58 @@ downsize_aruco: true
 # ==================================================================
 # ==================================================================
 
-# camera noises and chi-squared threshold multipliers
-up_msckf_sigma_px: 1
-up_msckf_chi2_multipler: 1
-up_slam_sigma_px: 1
-up_slam_chi2_multipler: 1
+# Camera measurement noise and outlier gate. These two lines were worth 97.8 %
+# drift, and finding that out took measuring what the filter actually did with
+# its features rather than what it produced.
+#
+# WHAT WAS HAPPENING. With sigma_px 1 and chi2_multipler 1, the number of MSCKF
+# features used per update went to ZERO 17 s into the flight -- 695 of the
+# remaining 709 updates used no features at all -- and stayed there for the last
+# 47 s. The filter was dead-reckoning on the IMU with an accelerometer bias of
+# -0.47 m/s^2 that it had absorbed at the first corner, which is 30-50x the
+# sim IMU's measured bias wander (0.009-0.014 m/s^2). An independent KLT tracker
+# on the same images found 387 trackable features throughout that period, so
+# the imagery was fine and the filter was refusing it.
+#
+# That is what a too-tight gate does. Once a state becomes slightly
+# inconsistent, every residual looks like an outlier, every feature is rejected,
+# no update can correct the state, and the inconsistency becomes PERMANENT. The
+# failure is self-locking, which is why it looked like a sudden divergence at
+# the first turn rather than the gradual drift it was mistaken for.
+#
+# WHY 1 px WAS WRONG HERE. sigma_px is how well a feature's reprojection is
+# expected to match. OpenVINS ships 1 for EuRoC, where a handheld rig moves
+# slowly over real texture. This vehicle crosses ~15 px of image between tracked
+# frames (30.3 Hz camera, track_frequency 21 keeps every second frame = 15.2 Hz
+# measured; 5.8 m/s at 10 m over a 2.6 cm/px ground sample distance), and KLT
+# error grows with displacement. 1 px was not conservative, it was wrong.
+#
+# Measured on one recorded flight, replayed (drift, % of distance travelled):
+#
+#     sigma 1, chi2 1    97.8 / 98.0 / 99.4      <- the shipped values
+#     sigma 2, chi2 1    95.6                    <- noise alone fixes nothing
+#     sigma 1, chi2 5    25.3                    <- the gate is the dominant term
+#     sigma 2, chi2 5    21.0
+#     sigma 3, chi2 5    18.3
+#     sigma 4, chi2 5    16.0                    <- kept
+#     sigma 5, chi2 5    16.4
+#     sigma 8, chi2 5    16.6
+#
+# Zero-feature updates over the last 47 s fell from 695/709 to 237/709, and ATE
+# from 237 m to 2.49 m. The gate is what matters; sigma_px refines it. Raising
+# sigma_px is the more honest half of the fix, because unlike the multiplier it
+# also correctly reduces how hard each admitted measurement pulls the state.
+#
+# ON HARDWARE these must be re-derived, not copied. The right sigma_px is a
+# property of the tracker's actual reprojection scatter at the flight's speed
+# and altitude; a real camera with motion blur and rolling-shutter-free but
+# noisy imagery will want its own value. What transfers is the METHOD: count
+# the features the filter actually uses per update, and if that number goes to
+# zero while the images are still trackable, the gate is the problem.
+up_msckf_sigma_px: 4
+up_msckf_chi2_multipler: 5
+up_slam_sigma_px: 4
+up_slam_chi2_multipler: 5
 up_aruco_sigma_px: 1
 up_aruco_chi2_multipler: 1
 

@@ -24,15 +24,46 @@ import time
 from pymavlink import mavutil
 
 
-def wait_param(m, name, value, tries=8):
+def wait_param(m, name, value, tries=8, tol=1e-3, required=True):
+    """Set a parameter and CONFIRM the autopilot took the value.
+
+    The previous version returned success as soon as a PARAM_VALUE with the
+    right name came back, without looking at the value. That hides two failures
+    that look identical from here and are not:
+
+      * the parameter does not exist under that name, so nothing is set
+      * it exists but the value was clamped or rejected
+
+    Both cost a whole flight. Measured: this script set `WPNAV_SPEED`, which
+    ArduCopter 4.8-dev renamed to `WP_SPD`, and reported success. The vehicle
+    kept flying at its 10 m/s default while the run was recorded and analysed as
+    a slow flight -- the speed profiles came out identical, p90 6.30 m/s in
+    both, and only a dataflash parameter dump showed why.
+
+    A parameter that does not read back is a hard failure, because every later
+    conclusion is attributed to a change that never happened.
+    """
     for _ in range(tries):
         m.mav.param_set_send(m.target_system, m.target_component,
                              name.encode(), float(value),
                              mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
-        msg = m.recv_match(type="PARAM_VALUE", blocking=True, timeout=3)
-        if msg and msg.param_id.strip("\x00") == name:
-            return True
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            msg = m.recv_match(type="PARAM_VALUE", blocking=True, timeout=1)
+            if msg is None:
+                continue
+            if msg.param_id.strip("\x00") != name:
+                continue
+            if abs(msg.param_value - float(value)) <= tol * max(1.0, abs(float(value))):
+                return True
+            print(f"[mission] {name}: asked {value}, autopilot reports "
+                  f"{msg.param_value}", file=sys.stderr)
         time.sleep(0.5)
+    msg = (f"[mission] PARAMETER NOT SET: {name}={value} never read back. "
+           "Wrong name for this firmware, or rejected.")
+    if required:
+        raise SystemExit(msg)
+    print(msg, file=sys.stderr)
     return False
 
 
@@ -45,17 +76,46 @@ def set_mode(m, mode):
     return False
 
 
-def arm(m, timeout=60):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+def arm(m, sim_budget=60.0, wall_cap=600.0):
+    """Arm, and say why not if it fails.
+
+    ArduPilot explains every refusal in a STATUSTEXT ("PreArm: ..."), and
+    without surfacing it an arm failure is a dead end that costs a dataflash
+    dump to diagnose -- which is exactly what happened once here, for a
+    VISO_TYPE left set by the previous run.
+
+    The budget is SIM seconds, not wall seconds. Under software rendering this
+    sim runs at RTF ~0.2, so the old wall-clock 60 s was ~12 s of vehicle time
+    and could expire before pre-arm checks that legitimately take longer. The
+    wall cap is only a backstop for a sim whose clock has stopped."""
+    t0_sim, t0 = boot_s(m), time.time()
+    seen = set()
+    while time.time() - t0 < wall_cap:
+        now = boot_s(m)
+        if t0_sim is not None and now is not None and now - t0_sim > sim_budget:
+            break
         m.mav.command_long_send(
             m.target_system, m.target_component,
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 1, 0, 0, 0, 0, 0, 0)
-        ack = m.recv_match(type="COMMAND_ACK", blocking=True, timeout=3)
-        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM \
-                and ack.result == 0:
-            return True
-        time.sleep(2)
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            msg = m.recv_match(type=["COMMAND_ACK", "STATUSTEXT"],
+                               blocking=True, timeout=1)
+            if msg is None:
+                continue
+            if msg.get_type() == "STATUSTEXT":
+                txt = msg.text.strip() if isinstance(msg.text, str) \
+                    else msg.text.decode(errors="replace").strip()
+                if txt and txt not in seen:
+                    seen.add(txt)
+                    print(f"[mission] autopilot: {txt}", flush=True)
+                continue
+            if msg.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM \
+                    and msg.result == 0:
+                return True
+    if seen:
+        print("[mission] arm refused; last reasons: "
+              + " | ".join(sorted(seen)[-3:]), file=sys.stderr)
     return False
 
 
@@ -176,6 +236,15 @@ def main():
                     help="wait for this to appear before arming")
     ap.add_argument("--ekf-log", metavar="PATH",
                     help="write LOCAL_POSITION_NED to a CSV for comparison")
+    ap.add_argument("--speed", type=float, default=0.0,
+                    help="WPNAV_SPEED in m/s (0 = leave at the firmware "
+                         "default). Speed is an estimator variable, not just a "
+                         "mission one: inter-frame image motion is "
+                         "proportional to it, and KLT error grows with "
+                         "displacement.")
+    ap.add_argument("--fixed-yaw", action="store_true",
+                    help="WP_YAW_BEHAVIOUR=0: hold heading through the whole "
+                         "mission instead of turning to face each leg")
     args = ap.parse_args()
 
     global EKF_LOG
@@ -196,6 +265,36 @@ def main():
     wait_param(m, "FRAME_CLASS", 1)
     wait_param(m, "FRAME_TYPE", 1)
 
+    # Yaw behaviour is an experiment variable, and it was an unexamined default
+    # until now. ArduPilot ships WP_YAW_BEHAVIOUR=2 ("face the next waypoint"),
+    # so a position target with the yaw bits masked off still makes the vehicle
+    # turn ~90 deg at every corner of the square. The camera points DOWN, so
+    # that yaw is a rotation of the whole image about its centre, and it happens
+    # while the vehicle is stopped at the waypoint -- rotation with no
+    # translation, hence no parallax, so features seen only across the turn
+    # cannot be triangulated. --fixed-yaw removes that from the mission so the
+    # corner can be tested as a pure change of travel direction.
+    if args.speed > 0:
+        # WP_SPD, not WPNAV_SPEED, and METRES per second, not centimetres.
+        # ArduCopter 4.8-dev renamed the waypoint-nav parameters and converted
+        # them to SI: WP_SPD / WP_ACC / WP_RADIUS_M, alongside LOIT_SPEED_MS and
+        # RTL_SPEED_MS. WPNAV_SPEED does not exist at all -- confirmed against a
+        # full 1380-entry dataflash parameter dump.
+        #
+        # The default WP_SPD is 10 m/s, and the vehicle was measured peaking at
+        # 8.15 m/s. PROJECT.md's inter-frame motion figures were derived from an
+        # assumed 5.8 m/s and are therefore ~1.4x optimistic.
+        wait_param(m, "WP_SPD", args.speed)
+        wait_param(m, "WP_ACC", max(1.0, args.speed * 0.5))
+        print(f"[mission] WP_SPD={args.speed} m/s (confirmed read-back)",
+              flush=True)
+
+    wait_param(m, "WP_YAW_BEHAVIOR", 0 if args.fixed_yaw else 2)
+    print(f"[mission] WP_YAW_BEHAVIOR="
+          f"{0 if args.fixed_yaw else 2}"
+          f"{' (heading held)' if args.fixed_yaw else ' (faces next waypoint)'}",
+          flush=True)
+
     # Ask for the streams rather than assuming: what ArduPilot sends by default
     # over TCP is not guaranteed to include EKF_STATUS_REPORT.
     m.mav.request_data_stream_send(m.target_system, m.target_component,
@@ -206,6 +305,32 @@ def main():
     # observed through messages that are definitely streamed. Whichever arrives
     # first, arming below is the real gate -- ArduPilot refuses until it is
     # genuinely happy, so this wait only avoids burning the arm retries.
+    if not args.extnav:
+        # SITL parameters PERSIST across runs in its eeprom.bin, so a run
+        # inherits whatever the previous one set. A Milestone-4 flight leaves
+        # VISO_TYPE=2 behind, and ArduPilot then refuses to arm any later run
+        # with "PreArm: VisOdom: not healthy" -- correctly, since with the
+        # bridge off nothing is sending VISION_POSITION_ESTIMATE. Observed as a
+        # whole flight lost to an unexplained arm failure.
+        #
+        # Every parameter this script depends on is therefore set explicitly in
+        # both directions, never left at "whatever it was".
+        # VISO_TYPE alone is not enough. AP_NavEKF_Source::pre_arm_check()
+        # validates EVERY configured source set, not just the active one, so a
+        # leftover EK3_SRC2_POSXY=6 (EXTNAV) with visual odometry now disabled
+        # fails with "AHRS: EK3 sources require VisualOdom". Both halves of the
+        # Milestone-4 configuration have to be undone together.
+        #
+        # 0 = None is the firmware default for the SRC2 set. The harness also
+        # wipes SITL's eeprom.bin per run; this is the second line of defence,
+        # and it documents which parameters this mission actually depends on.
+        wait_param(m, "VISO_TYPE", 0)
+        for name in ("EK3_SRC2_POSXY", "EK3_SRC2_POSZ", "EK3_SRC2_VELXY",
+                     "EK3_SRC2_VELZ", "EK3_SRC2_YAW"):
+            wait_param(m, name, 0)
+        print("[mission] VISO_TYPE=0, EK3_SRC2_* cleared "
+              "(no vision into ArduPilot this run)", flush=True)
+
     if args.extnav:
         # GPS stays PRIMARY. The whole point of this milestone is that a frame
         # error shows up as disagreement between two sources rather than as the

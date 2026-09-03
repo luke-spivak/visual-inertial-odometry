@@ -14,7 +14,7 @@ Secondary objective: the sim harness and evaluation framework are reusable for a
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
-| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestone 1 done (SITL + Gazebo Harmonic via `ardupilot_gazebo`, Guided flight). OpenVINS built and **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000** |
+| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. Milestone 3 produces a trajectory and an evo comparison, but **the < 5 % drift gate on it is not met**; residual is leg-to-leg magnitude inconsistency, and the untried levers are structural (no-stop mission, stereo) rather than parameters. Milestones 5 and 6 not started |
 | Camera bringup | Camera purchased — Pi now available, not yet started |
 | ArduPilot transition | Firmware constraint confirmed, build not yet generated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
@@ -616,6 +616,375 @@ Gravity deserves a note: gz's default world gravity is **9.8**, not 9.81, and co
 
 **Next test, and it is the one this sim was built to answer.** At 10 m altitude the 0.4–6 m obstacle field subtends very little of the view, so the scene is effectively the plane PROJECT.md warned about from the start. Flying the same mission at ~4 m puts genuine 3D structure in frame and halves the GSD. That is a scene change rather than more tuning, and it tests the project's central assumption instead of another parameter.
 
+> **Answered on 2026-09-02, and the answer is no on both counts.** The scene was
+> never a plane — measured, 5.03 px of parallax at p95 — and flying at 4 m would
+> have made it *flatter*, not richer, because the obstacles carry collision
+> geometry and have to be capped for clearance. The real fault was a chi-squared
+> gate that had the filter rejecting every feature it had. See the two sections
+> below.
+
+### The filter was rejecting every feature it had (2026-09-02)
+
+**Result: drift 97.8 % → 15.4–16.0 %, ATE 237 m → 2.5 m, from two numbers in the
+estimator config.** Reproduced on two independent flights, three replays each,
+every repeat covering 96–98 % of a ~156 m flight. **The < 5 % gate for Phase 3
+step 5 is not met**; what was fixed, what was ruled out, and what is left are all
+below.
+
+**The planar degeneracy — this project's founding hypothesis — is ruled out by
+measurement.** `harness/parallax_check.py` tracks features between two views,
+fits the best homography, and reports the residual. Between two views of a plane
+a homography explains *every* pixel exactly, whatever the camera did, so the
+residual is by construction the part of the image motion no plane can account
+for. That is parallax, and parallax is what makes depth observable. Measured on
+the structured 10 m flight, over 42 frame pairs during cruise:
+
+```
+resid_p50    0.21 px      <- the noise floor
+resid_p95    5.03 px      <- the parallax actually available
+frac_gt_1px  0.16         <- 16 % of features move >1 px from where a plane says
+H inliers    0.91
+```
+
+Five pixels of parallax at p95 is genuine 3D structure, not a plane. Drift was
+97.8 % anyway. The degeneracy PROJECT.md has warned about since the first
+paragraph of the sim-harness section is not what has been wrong.
+
+**What was actually wrong.** OpenVINS logs the number of features it uses per
+update at DEBUG verbosity. Counting them:
+
+| phase | MSCKF feats/update | SLAM feats |
+|---|---|---|
+| climb + first leg | 4.5–11 median | 34–50 |
+| first corner | 4.5 | 49 → **3** |
+| **remaining 47 s** | **0 — 695 of 709 updates** | **0** |
+
+The visual update pipeline died 17 s into the flight and never recovered.
+Everything after was pure IMU dead-reckoning. Meanwhile an independent KLT
+tracker on the *same images* found 387 trackable features throughout that
+period, with 91 % homography inliers. The imagery was fine. **The filter was
+refusing it.**
+
+The mechanism is a chi-squared outlier gate that is too tight, and its defining
+property is that the failure is **self-locking**. Once a state becomes slightly
+inconsistent, every residual looks like an outlier; every feature is rejected;
+no update can correct the state; so the inconsistency is permanent. That is why
+this presented as a sudden divergence at the first turn rather than the gradual
+drift it was repeatedly assumed to be.
+
+**The state trace shows it precisely.** From `save_total_state`, the
+accelerometer bias:
+
+```
+t= 7.9-12.6   first leg flown perfectly, 20.2 m      ba_y = +0.013
+t=13.0-14.6   1.6 s after the first stop             ba_y  0.013 -> -0.601
+t=15.4-64.6   the remaining 50 s                     ba_y = -0.468, FROZEN
+```
+
+−0.47 m/s² is 30–50× the sim IMU's measured bias wander (0.009–0.014 m/s² over
+40 s). A bias that large integrates to ~280 m over the flight, which is the
+entire ATE. A bias frozen to three decimals for 50 seconds is a filter receiving
+no information.
+
+**The fix, and the honest half of it.** `up_*_chi2_multipler` 1 → 5 is the
+dominant term; `up_*_sigma_px` 1 → 4 refines it. Measured on identical replayed
+input:
+
+| sigma_px | chi2 mult | drift |
+|---|---|---|
+| 1 | 1 | 97.8 / 98.0 / 99.4 % |
+| 2 | 1 | 95.6 % |
+| 1 | 5 | 25.3 % |
+| 2 | 5 | 21.0 % |
+| 3 | 5 | 18.3 % |
+| **4** | **5** | **16.0 %** |
+| 5 | 5 | 16.4 % |
+| 8 | 5 | 16.6 % |
+
+Noise alone fixes nothing; the gate is what matters. But raising `sigma_px` is
+the more principled half, because unlike the multiplier it also correctly
+reduces how hard each admitted measurement pulls the state. And 1 px was
+genuinely wrong here: the vehicle crosses ~15 px of image between tracked frames
+(30.3 Hz camera, `track_frequency` 21 keeping every second frame = **15.2 Hz
+measured**, at 5.8 m/s over a 2.6 cm/px GSD), and KLT error grows with
+displacement. 1 px was not conservative, it was a misdescription of the sensor.
+
+Zero-feature updates over the last 47 s fell from 695/709 to 237/709.
+
+**Ruled out along the way, all on the same replayed flight:**
+
+| Hypothesis | Result |
+|---|---|
+| Monocular planar degeneracy | **measured 5.03 px of parallax at p95** — the scene is not a plane |
+| Online calibration | freezing all three: 97.44 % vs 97.83–99.39 % baseline — no effect |
+| ZUPT misfiring at waypoint stops | `has_moved_since_zupt` is set unconditionally after the first propagation; the log contains **zero** ZUPT events |
+| Dropped IMU or camera samples | streams are exactly uniform: 200.01 Hz and 30.32 Hz, **zero gaps** |
+| Zero-baseline clone window at the stops | the arithmetic is seductive — 11 clones at 15.2 Hz spans 0.72 s and the corner dwell is 0.5–0.8 s, so the window *does* collapse onto stationary poses — but widening it to 1.3 s and 2.0 s gave 97.6 % and 95.6 % |
+| More features | 400 points / 75 SLAM slots with the gate open: **102.2 %**, far worse. The extra features are the marginal ones |
+| Higher tracking rate | `track_frequency` 31 keeps every frame and halves inter-frame motion to 7.4 px: 16.3 % vs 16.0 %, no help |
+
+**A correction to an earlier entry.** The 2026-09-01 note recorded that
+disabling online calibration took ATE from 10.1 m to 148.9 m, and read that as
+evidence of a wrong camera-IMU transform being absorbed by the filter. Freezing
+all three now gives 97.44 % against a 97.83–99.39 % baseline — no effect. The
+earlier measurement was real but of a different configuration, before the
+gravity fix and on a different scene, and it pointed at a problem that was never
+there. The "online calibration helps by 15×, and that is unexplained" open
+question is closed: it does not.
+
+**Where it stands, over two independent flights of the same mission:**
+
+| flight | peak speed | path | drift (3 replays) | ATE RMSE |
+|---|---|---|---|---|
+| default speed | 8.17 m/s | 155.8 m | 15.89 / 15.97 / **15.99 %** | 2.43–2.49 m |
+| `WP_SPD` 2.5 | 2.75 m/s | 156.8 m | 15.19 / 15.35 / **15.69 %** | 2.33–2.63 m |
+
+**Speed is not the limiter, and that was the leading candidate.** Cutting peak
+speed 3× cuts inter-frame image motion 3× — ~21 px to ~7 px between tracked
+frames — which is exactly the quantity `up_msckf_sigma_px` = 4 was introduced to
+absorb. It changed nothing: 15.4 % against 16.0 %, inside the ~1.3 %
+flight-to-flight spread. Whatever remains is not tracking noise from image
+motion.
+
+**Nor is it the accelerometer bias being under-constrained.** The bias is what
+absorbed the original failure, so tightening how fast it is allowed to move
+looked promising. Measured on the slow flight, against 15.4 % at the declared
+3.0e-3:
+
+| accel random walk | drift |
+|---|---|
+| 1.9e-3 (the measured value) | 18.9 % |
+| 5.0e-4 | 22.3 % |
+| 1.0e-4 | 29.0 % |
+
+Monotonically worse. The filter needs that freedom; constraining it is not the
+fix.
+
+**What the residual actually looks like.** ATE is 2.5 m over 156 m — **1.6 % of
+path length** — while RPE over 10 m segments is 15 %. Globally right, locally
+wrong. Per-leg, every direction is now correct to within a consistent ~176°
+offset (the unobservable global yaw, which evo's alignment removes), but the
+*scales* vary leg to leg: 0.92, 0.99, 1.09, 1.03, 1.36, 1.12, 0.81. That is not
+noise and not a constant scale error — it is the metric scale being re-derived
+differently on each leg. In a monocular filter scale comes from the IMU, so this
+is a visual-inertial consistency problem that survives every parameter tried.
+
+**Answered: no, a rangefinder cannot rescue this, and the reason is not the one you would guess.**
+The obvious move when a monocular system drifts is to add a metric reference.
+Measured on both flights, it does not apply here:
+
+* **There is no scale error to correct.** Letting evo fit a scale factor
+  (Sim(3), `-as`) instead of a rigid transform (`-a`) changes ATE by under 1 % —
+  2.473 → 2.451 m and 2.626 → 2.605 m. The IMU already delivers correct metric
+  scale, exactly as the EuRoC baseline showed with a Umeyama scale of 1.000.
+* **The error is in the axis a downward rangefinder does not measure.**
+  Splitting ATE after rigid alignment: horizontal 2.35 m / vertical 0.78 m on the
+  fast flight (90 % / 10 % of squared error), and 2.58 / 0.50 m on the slow one
+  (96 % / 4 %). Perfect altitude knowledge removes at most ~5 % of the ATE.
+* **The TF-Luna is out of range anyway.** Its ceiling is 8 m and the vehicle is
+  above 8 m for 64–75 % of the mission.
+
+The rangefinder is still worth its place, for different jobs: as a **health check
+on the estimator** (in the broken run the estimate climbed to 61 m while the
+vehicle held 10 m — a rangefinder catches that immediately), for
+**ArduPilot-level fusion** via `EK3_SRC*_POSZ`, which is already supported and
+costs nothing, and for low-altitude work where it is actually in range. It does
+not belong inside OpenVINS, which has no range input.
+
+**A correction, because it affects a hardware decision.** The note above about
+stereo originally justified it as removing "monocular scale ambiguity". That is
+wrong, and this measurement is what disproves it: global scale is already right.
+The accurate case for stereo is the leg-to-leg *magnitude* inconsistency
+(0.81–1.36, which largely cancels globally) — stereo supplies metric depth per
+frame rather than requiring the IMU to condition it across a sliding window.
+
+**Honest position: the < 5 % gate is not met, and the next step is not another
+parameter.** Six of them have now been swept with no effect or a negative one.
+The things not yet tried are structural: a mission that does not stop and turn
+at every waypoint (every failure in this investigation began at a corner), and
+stereo — the Pi 5 has a second CSI port and $36 of hardware supplies metric
+depth per frame instead of asking the IMU to condition it across a sliding
+window, which is where the leg-to-leg magnitude inconsistency comes from.
+
+### Two parameters that were never set, and one that was set to nothing (2026-09-02)
+
+**`WPNAV_SPEED` does not exist in ArduCopter 4.8-dev.** The waypoint-nav
+parameters were renamed and converted to SI: it is **`WP_SPD`, in metres per
+second**, alongside `WP_ACC`, `WP_RADIUS_M`, `LOIT_SPEED_MS`, `RTL_SPEED_MS`.
+Confirmed against a full 1380-entry dataflash parameter dump, which contains no
+`WPNAV_*` at all.
+
+Two consequences, and the second is worse than the first.
+
+**The mission has been flying at up to 8.15 m/s, not 5.8 m/s.** `WP_SPD`
+defaults to 10 m/s. Every inter-frame-motion figure derived from 5.8 m/s in this
+file is therefore ~1.4× optimistic: the tracker sees ~21 px between tracked
+frames at 10 m, not 15. That is the number `up_msckf_sigma_px` had to absorb.
+
+**A whole flight was recorded, analysed and nearly reported as a slow flight
+that was not slow.** `wait_param` returned success as soon as a `PARAM_VALUE`
+with the right *name* came back — it never looked at the value, and for a
+parameter that does not exist it reported success anyway. The run produced a
+clean-looking distribution (12.12 / 12.31 / 12.33 % against 15.89 / 15.97 /
+15.99 %) and the obvious reading was "flying slower helps by 25 %". It is not:
+the ground-truth speed profiles of the two flights are identical —
+
+```
+fast (default)     p50 1.21  p90 6.30  p99 8.07  max 8.17 m/s
+slow (WP_SPD 2.5)  p50 1.24  p90 6.30  p99 8.05  max 8.15 m/s
+```
+
+— so that 25 % is **flight-to-flight variation between two recordings of the
+same mission**, not an effect of anything. `wait_param` now verifies the
+read-back value and raises rather than returning False, because a parameter that
+silently does not apply attributes every later conclusion to a change that never
+happened.
+
+**The variance result matters on its own.** Replay-to-replay spread on one
+recording is 1.01–1.04×, measured three times. Flight-to-flight spread on the
+same mission is ~1.3×. So the distributions this harness reports are only valid
+*within* a recording; two flights are not comparable at the 25 % level, and any
+scene or mission change must clear that bar before it means anything. This is
+the ATE-span trap in a new costume, and the fix is the same: state what varied.
+
+### Method notes that changed how this was found
+
+**Count what the filter uses, not what it outputs.** Every previous round of this
+investigation compared trajectories. The answer was in a number OpenVINS prints
+at DEBUG verbosity and nobody had read: features used per update. Two lines of
+grep separated "the estimator is drifting" from "the estimator has been blind
+for 47 seconds", and those need completely different fixes.
+
+**`subscribe.launch.py` owns four settings, not two.** PROJECT.md already
+recorded `max_cameras` and `use_stereo`. Add `save_total_state` and `verbosity`:
+both are declared as launch arguments with their own defaults, both silently
+beat the YAML, and the launch file *hardcodes* the output paths
+(`/tmp/ov_estimate.txt`), ignoring `filepath_est` entirely. `save_total_state:
+true` in the config had been inert; the state trace above was unavailable until
+it was passed on the command line.
+
+**Measure the scene, don't argue about it.** The planar-degeneracy hypothesis was
+three months old, load-bearing for the scene design, and had never been tested
+against a single recorded image. It took one 60-line script and no flight.
+
+### Altitude was the wrong knob, and the geometry says so (2026-09-02)
+
+The plan on the table was to fly the same mission at ~4 m: "real 3D structure in
+frame, and the ground sample distance halves." Both halves of that turn out to be
+wrong here, and the arithmetic is worth keeping because it inverts the intuition.
+
+**The sim camera is not the flight camera.** `/cam0/camera_info` reports
+f = 381.347 at 640 x 400, so the simulated FOV is **80 deg horizontal**, not the
+OV9281's 118 deg. Every altitude/footprint estimate made with the hardware number
+is wrong by a factor of 1.7 in swath width. At 10 m the sim camera sees
+16.8 x 10.5 m, not the ~30 m the hardware figure implies.
+
+**The obstacles have collision geometry, and the mission altitude is coupled to
+the scene through it.** Flying the 20 m square at 4 m over the existing field
+means flying into objects up to 5.27 m tall, and there is one within 1 m of
+*every* leg. So height has to be capped along the flight path, and how much can
+be left standing under the vehicle is set by the altitude itself:
+
+```
+depth spread in frame  ~  alt / (alt - tallest object the vehicle can fly over)
+```
+
+Flying lower does not put more structure under the camera. It forces *shorter*
+structure there. Measured from the generated SDF against the sim frustum:
+
+| Configuration | depth in frame | spread | feature dwell @ 5.8 m/s |
+|---|---|---|---|
+| 10 m, old field (6 m objects, no corridor) | 4.0–14.1 m | 3.5:1 | 38 tracked frames |
+| 4 m, corridor capped at 2 m | 2.0–5.6 m | **2.8:1** | **15 tracked frames** |
+| 10 m, corridor capped at 7 m, field to 9 m | 3.0–14.1 m | **4.7:1** | 38 tracked frames |
+
+So the 4 m test as specified would have made the scene *flatter* while making the
+front end 2.5x harder — inter-frame flow rises from 10.5 px to 26.3 px per tracked
+frame, and feature dwell falls by the same factor, because the footprint shrinks
+with altitude and the speed does not. It would have confounded the hypothesis
+with a harder tracking problem and answered neither.
+
+The controlled version of the same hypothesis is the third row: **hold altitude,
+speed, GSD and dwell fixed, and raise the scene's depth spread instead.**
+`gazebo/worlds/make_scene.sh ALT` generates it, and `harness/field_clearance.py`
+reports clearance and depth spread from the SDF before anything is flown. The
+check is wired into generation rather than left as a step to remember.
+
+### Three harness faults, each of which silently costs a flight (2026-09-02)
+
+**SITL parameters persist across runs, and one of them blocks arming.** A flight
+died with nothing but `[mission] FAILED to arm`. The reason was only in the
+dataflash log: `PreArm: VisOdom: not healthy`. The previous Milestone-4 flight had
+set `VISO_TYPE=2`, SITL keeps that in its `eeprom.bin`, and every later run
+without the bridge inherits it — correctly refusing to arm, since nothing is
+sending `VISION_POSITION_ESTIMATE`. The mission script set `VISO_TYPE` only in the
+`--extnav` branch, so the off case was "whatever the last run left behind".
+
+Fixes, and the second matters more than the first:
+- every parameter the mission depends on is now set explicitly in **both**
+  directions, never left inherited
+- `arm()` prints the autopilot's own `STATUSTEXT`. ArduPilot explains every
+  refusal; not surfacing it turned a one-line answer into a dataflash dig.
+
+**`arm()` budgeted in wall clock.** 60 s of wall is ~12 s of vehicle time at
+RTF 0.2 — the same mistake PROJECT.md already records for waypoint pacing,
+surviving in the one function whose failure looks like a vehicle problem. Now
+budgeted in sim time with a wall-clock backstop.
+
+**`/tmp` does not survive a VM reboot.** Every recorded flight lives in
+`/tmp/simvio_*`, and a restart takes all of them. Offline replay is the whole
+basis of the estimator investigation — every ruled-out hypothesis was tested by
+replaying one recorded flight — and that capability silently reset to zero. Any
+bag worth re-replaying belongs outside `/tmp`.
+
+### Evaluation traps, now enforced rather than remembered
+
+Two of the documented traps were things to remember at analysis time, which is
+where they had already caused wrong conclusions. Both are now checks:
+
+- **`eval_sim_run.sh` reports trajectory span and coverage automatically**, and
+  prints a loud warning below 90 %. A run that diverges and stops early scores
+  *better* on ATE, so comparing two numbers over different spans is meaningless.
+- **`replay_repeats.sh` refuses to produce a single number.** It replays one
+  recorded flight N times and reports min/median/max plus the spread, because
+  OpenVINS initialises on a background thread and identical input does not give
+  identical output (1.7x measured on EuRoC).
+
+`harness/analyze_run.sh` chains rebase -> measured start offset -> N replays ->
+per-leg breakdown, so the whole path from a landed flight to a distribution is
+one command with no remembered steps.
+
+### The sim eats the host that runs it (2026-09-02)
+
+The VM died mid-session with no guest-side trace, taking a completed flight
+recording with it. It was not a guest fault and not a UTM bug: macOS Jetsam
+terminated QEMU under memory pressure.
+
+Measured on the host:
+
+| | |
+|---|---|
+| data volume | 402 GB used of 460 GB — **96 % full, 19 GB free** |
+| RAM / swap | 16 GB, swap 3.0 GB of 4.0 GB used |
+| QEMU | the largest process on the machine (VM allocated ~7 GB) |
+| prior evidence | a `JetsamEvent` report from the previous day |
+
+Jetsam kills the largest process when it cannot satisfy demand, and it cannot
+grow swap on a nearly-full disk. QEMU is by a wide margin the largest process,
+so it goes first.
+
+**The loop is self-reinforcing, and that is the part worth recording.** UTM
+holds 101 GB of VM images (68 + 24 + 9). Every gigabyte a flight records inside
+the guest inflates the host's disk image, consuming exactly the free space that
+keeps the VM alive. A session of `RECORD_SENSORS=1` flights is therefore a slow
+denial-of-service against its own host. Recording is not free the way "there is
+19 GB free in the guest" makes it look — guest free space and host free space
+are the same resource, seen twice.
+
+Practical consequences: keep host free space above ~40 GB before a flight
+session, prune `~/vio_runs` deliberately, and treat a VM that vanishes without a
+guest-side log as a host-side kill rather than a sim fault.
+
 ---
 
 ## Rejected options
@@ -660,6 +1029,9 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 - 3D printing is now optional, not blocking — only the camera+IMU bracket needs rigidity and it is hand-cuttable from FR4. Printer purchase deferred until mount iteration actually bottlenecks.
 - Camera works on **Cam0 port only** on Pi 5 per user reports; a missing libcamera tuning JSON in default Raspbian requires vendor support to resolve.
 - Whether gz's `dynamic_bias_stddev` is also per-sample. The white-noise `<stddev>` question is answered (it is); the bias terms were not measured.
+- **What takes the sim from 16 % drift to the < 5 % gate.** ATE is already 1.6 % of path length; the residual is local (RPE), i.e. tracking noise, and the parameter absorbing it (`up_*_sigma_px` = 4) is a measurement of that noise. The untested lever is what causes it: ~15 px of inter-frame image motion at 5.8 m/s and 15.2 Hz effective tracking. Flying slower is the direct test.
+- **Whether the chi-squared gate is the same story on hardware.** In sim the fix was worth 6× in drift and 95× in ATE. Real imagery has motion blur, vibration and genuine outliers, so the right `sigma_px` will differ — but the diagnostic transfers exactly: count the features the filter *uses* per update, and if that goes to zero while the images are still trackable, the gate is the problem.
+- ~~Why online calibration helps by 15×~~ — **closed.** It does not; re-measured at 97.44 % against a 97.83–99.39 % baseline. The original measurement was of a pre-gravity-fix configuration on a different scene.
 
 ---
 

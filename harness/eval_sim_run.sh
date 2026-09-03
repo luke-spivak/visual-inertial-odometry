@@ -60,6 +60,30 @@ print(f"    ground-truth path: {d:.1f} m over {len(p)} poses")
 open(sys.argv[1] + ".len", "w").write(f"{d}\n")
 PY
 
+# TRAP: ATE over different trajectory spans is not comparable, and this has
+# invalidated conclusions here before. A run that diverges and stops early
+# scores BETTER, because it ends before the worst of it. So the span check is
+# automatic rather than something to remember: any comparison between two
+# numbers below is only meaningful if both cover the same flight.
+echo
+echo "==> span"
+python3 - "$RUN/gt.tum" "$RUN/est.tum" <<'PY'
+import sys
+def span(path):
+    t = [float(l.split()[0]) for l in open(path) if l.strip()]
+    return (t[0], t[-1], t[-1] - t[0], len(t))
+g0, g1, gd, gn = span(sys.argv[1])
+e0, e1, ed, en = span(sys.argv[2])
+ov = max(0.0, min(g1, e1) - max(g0, e0))
+print(f"    ground truth : {gd:7.2f} s  ({gn} poses)")
+print(f"    estimate     : {ed:7.2f} s  ({en} poses)   starts +{e0 - g0:.2f} s")
+print(f"    overlap      : {ov:7.2f} s  = {100 * ov / gd:.1f} % of the flight")
+if ov < 0.9 * gd:
+    print(f"    *** PARTIAL COVERAGE: the estimate spans {100 * ov / gd:.0f} % of the")
+    print("        flight. ATE and drift below are NOT comparable to a run that")
+    print("        covered more of it -- an early stop hides the worst error. ***")
+PY
+
 echo
 # No --t_max_diff: evo's default 0.01 s is what run_euroc_eval.sh used for the
 # baseline, so the two numbers stay comparable. Loosening it to 0.05 s would

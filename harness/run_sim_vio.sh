@@ -23,7 +23,19 @@ TAG="${1:-$(date +%H%M%S)}"
 # generated obstacle field. Both declare <world name="iris_runway">, so the
 # bridge's /world/iris_runway/... topic names hold for either.
 WORLD="${WORLD:-iris_runway_vio.sdf}"
-RUN="/tmp/simvio_$TAG"
+# NOT /tmp. Ubuntu clears /tmp on boot, and a recorded flight is the most
+# expensive artifact this harness produces -- ~25 minutes of wall clock, and the
+# basis of every offline replay, which is how every estimator hypothesis so far
+# has been tested. Two separate restarts (one deliberate, one a host-side crash
+# of the VM) have already destroyed complete recordings that had cost a flight
+# each. Runs live under $HOME, which survives a reboot.
+#
+# They are NOT free: each flight is a few hundred MB inside the guest, which
+# also inflates the VM's disk image on the host. Delete old runs deliberately
+# rather than relying on a reboot to do it.
+RUNS_DIR="${VIO_RUNS:-$HOME/vio_runs}"
+mkdir -p "$RUNS_DIR"
+RUN="$RUNS_DIR/simvio_$TAG"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 rm -rf "$RUN"; mkdir -p "$RUN"
@@ -209,13 +221,33 @@ fi
 # Kept as a knob only because sim_vehicle.py --speedup takes integers.
 SPEEDUP="${SIM_SPEEDUP:-1}"
 printf 'SIM_SPEEDUP %s\n' "$SPEEDUP" > "$RUN/sim_speed.parm"
-echo "==> SITL (SIM_SPEEDUP $SPEEDUP)"
+
+# Wipe the parameter EEPROM every run. SITL persists parameters in
+# ardupilot/eeprom.bin across invocations, so a run silently inherits whatever
+# the previous one configured -- and two consecutive flights were lost to
+# exactly that. A Milestone-4 run leaves VISO_TYPE=2 and EK3_SRC2_*=EXTNAV
+# behind, and the next plain run then refuses to arm:
+#
+#     PreArm: VisOdom: not healthy            (nothing is sending vision)
+#     PreArm: AHRS: EK3 sources require VisualOdom
+#
+# Both are ArduPilot being right. The fault is a harness that treats the
+# autopilot's saved state as a constant. Wiping makes each run start from the
+# firmware defaults, so the parameters that matter are exactly the ones the
+# mission sets explicitly -- and an experiment is reproducible from the scripts
+# alone rather than from the scripts plus the history of the box it ran on.
+#
+# Cost is one extra SITL reboot at startup. Set WIPE_EEPROM=0 only to
+# deliberately carry state between runs.
+WIPE=""
+[ "${WIPE_EEPROM:-1}" = "1" ] && WIPE="-w"
+echo "==> SITL (SIM_SPEEDUP $SPEEDUP${WIPE:+, eeprom wiped})"
 nohup env -i \
   HOME="$HOME" USER="${USER:-$(id -un)}" \
   PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/ardupilot/Tools/autotest" \
   bash -c "cd \$HOME/ardupilot && \
     sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --no-mavproxy \
-    --add-param-file=$RUN/sim_speed.parm \
+    $WIPE --add-param-file=$RUN/sim_speed.parm \
     --out=udp:127.0.0.1:14551" > "$RUN/sitl.log" 2>&1 &
 own $!
 echo "    (first run recompiles SITL, may take several minutes)"
@@ -242,10 +274,25 @@ rm -f "$RUN/ekf_ready" "$RUN/estimator_ready"
 
 MISSION_ARGS=""
 [ "${RUN_BRIDGE:-0}" = "1" ] && MISSION_ARGS="--extnav"
+# FIXED_YAW=1 holds heading through the mission. See fly_sim_mission.py: the
+# default turns the vehicle to face each leg, which spins a downward camera's
+# image 90 deg at every corner while it is stationary.
+[ "${FIXED_YAW:-0}" = "1" ] && MISSION_ARGS="$MISSION_ARGS --fixed-yaw"
+# MISSION_SPEED (m/s) sets WPNAV_SPEED. Inter-frame image motion scales with it,
+# and that is what sets how much reprojection error the tracker makes.
+[ -n "${MISSION_SPEED:-}" ] && MISSION_ARGS="$MISSION_ARGS --speed $MISSION_SPEED"
 
-echo "==> mission (waiting for EKF)"
+# Altitude is an experiment variable, not a constant. At 10 m the 0.4-6 m
+# obstacle field subtends almost nothing and the scene is effectively a plane;
+# lower flight puts real 3D structure in frame and halves the ground sample
+# distance. Kept out of the mission script's defaults so a run records the
+# altitude it actually flew.
+echo "==> mission (waiting for EKF)  alt=${MISSION_ALT:-10} side=${MISSION_SIDE:-20}"
+printf 'alt %s\nside %s\nworld %s\n' \
+  "${MISSION_ALT:-10}" "${MISSION_SIDE:-20}" "$WORLD" > "$RUN/mission_params.txt"
 # shellcheck disable=SC2086
 python3 "$HERE/fly_sim_mission.py" --conn tcp:127.0.0.1:5760 \
+  --alt "${MISSION_ALT:-10}" --side "${MISSION_SIDE:-20}" \
   --ekf-log "$RUN/ekf_pos.csv" \
   --ready-file "$RUN/ekf_ready" --wait-file "$RUN/estimator_ready" \
   $MISSION_ARGS > "$RUN/mission.log" 2>&1 &
@@ -274,18 +321,6 @@ nohup ros2 launch ov_msckf subscribe.launch.py \
 own $!
 sleep 12
 
-# RECORD_SENSORS=1 also bags the raw camera and IMU. That is ~5 GB for a
-# 10-minute flight, and worth it: with the sensors on disk the estimator can be
-# re-run offline in seconds instead of re-flying for 25 minutes, and replaying
-# identical input removes the run-to-run timing variance that PROJECT.md
-# measured at 1.7x on EuRoC. Set to 0 for routine runs once tuning is settled.
-# Default off when streaming to ArduPilot: milestone 4's evidence is the
-# autopilot's dataflash log, not another 5 GB copy of the camera feed.
-: "${RECORD_SENSORS:=$([ "${RUN_BRIDGE:-0}" = "1" ] && echo 0 || echo 1)}"
-TOPICS="/ov_msckf/odomimu /gz/ground_truth"
-if [ "${RECORD_SENSORS:-1}" = "1" ]; then
-  TOPICS="$TOPICS /cam0/image_raw /cam0/camera_info /imu0"
-fi
 # RECORD_SENSORS=1 also bags the raw camera and IMU. That is ~5 GB for a
 # 10-minute flight, and worth it: with the sensors on disk the estimator can be
 # re-run offline in seconds instead of re-flying for 25 minutes, and replaying
