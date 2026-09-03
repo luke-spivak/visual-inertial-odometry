@@ -55,5 +55,21 @@ python3 "$HERE/make_feature_field.py" \
 
 # The check is part of generation, not something to remember to run. It exits
 # non-zero on a collision risk, so a caller that ignores it still fails loudly.
+#
+# The harness lives in two different places depending on where this runs: beside
+# gazebo/ in the repo, and in ~/vio_harness on the VM, which is a deploy target
+# rather than a checkout. Resolve rather than assume -- hardcoding the repo
+# layout made this abort every sweep on the VM.
+CHECK=""
+for c in "$HERE/../../harness/field_clearance.py" \
+         "$HOME/vio_harness/field_clearance.py" \
+         "$HERE/../harness/field_clearance.py"; do
+  [ -f "$c" ] && { CHECK="$c"; break; }
+done
 echo
-python3 "$HERE/../../harness/field_clearance.py" "$OUT" "$ALT"
+if [ -n "$CHECK" ]; then
+  python3 "$CHECK" "$OUT" "$ALT"
+else
+  echo "WARNING: field_clearance.py not found -- scene generated but NOT" >&2
+  echo "checked for collision clearance at ${ALT} m." >&2
+fi

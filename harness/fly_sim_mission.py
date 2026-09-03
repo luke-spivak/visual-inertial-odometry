@@ -119,6 +119,44 @@ def arm(m, sim_budget=60.0, wall_cap=600.0):
     return False
 
 
+def deny_gps(m):
+    """Milestone 5: take GPS away mid-flight and leave the EKF on vision.
+
+    Two steps, and the ORDER matters. Switching the EKF to source set 2 first
+    means it already has a position source when GPS disappears; doing it the
+    other way round leaves EKF3 with no horizontal position for a moment, which
+    triggers a failsafe and tests nothing.
+
+    Aux function 90 is EKF_POS_SOURCE: switch-low selects source set 1,
+    switch-middle set 2, switch-high set 3. Set 2 was configured as ExternalNav
+    during the --extnav setup and verified against GPS through milestone 4.
+
+    Then SIM_GPS1_ENABLE=0 removes the GPS entirely. That second step is what
+    makes this a real test rather than a preference: with the receiver still
+    running, a source-set switch alone leaves ArduPilot able to fall back, and a
+    silent fallback would look exactly like success."""
+    print("[mission] switching EKF to source set 2 (ExternalNav)", flush=True)
+    m.mav.command_long_send(
+        m.target_system, m.target_component,
+        mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION, 0,
+        90,   # EKF_POS_SOURCE
+        1,    # switch middle = source set 2
+        0, 0, 0, 0, 0)
+    ack = m.recv_match(type="COMMAND_ACK", blocking=True, timeout=5)
+    if ack and ack.command == mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION:
+        print(f"[mission] source-set ack result={ack.result}", flush=True)
+    else:
+        print("[mission] no ack for EKF_POS_SOURCE", file=sys.stderr)
+    event(m, "src2_extnav")
+
+    # Let the EKF settle on vision before removing its fallback.
+    wait_for(m, lambda n, e, d: False, 4, "source switch settle")
+
+    wait_param(m, "SIM_GPS1_ENABLE", 0)
+    print("[mission] simulated GPS DISABLED -- vision only from here", flush=True)
+    event(m, "gps_off")
+
+
 def boot_s(m):
     """The VEHICLE's clock, in seconds. This is sim time: under software
     rendering the sim runs at RTF ~0.2, so it advances five times slower than
@@ -133,6 +171,20 @@ def boot_s(m):
 
 
 EKF_LOG = None
+EVENT_LOG = None
+
+
+def event(m, name):
+    """Timestamp a mission event on the VEHICLE's clock.
+
+    The analysis has to know exactly when GPS went away, and it has to know it
+    in the same time base as the recorded ground truth. Wall clock is useless
+    here (RTF ~0.2) and "roughly after the first leg" is not a measurement."""
+    t = boot_s(m)
+    print(f"[mission] EVENT {name} at t_boot={t}", flush=True)
+    if EVENT_LOG is not None:
+        EVENT_LOG.write(f"{t if t is not None else -1:.3f},{name}\n")
+        EVENT_LOG.flush()
 
 
 def local_pos(m, timeout=5.0):
@@ -242,12 +294,26 @@ def main():
                          "mission one: inter-frame image motion is "
                          "proportional to it, and KLT error grows with "
                          "displacement.")
+    ap.add_argument("--gps-denied", action="store_true",
+                    help="milestone 5: after the first leg, switch EKF3 to the "
+                         "ExternalNav source set and disable the simulated GPS, "
+                         "then fly the rest of the mission on vision alone. "
+                         "Implies --extnav.")
+    ap.add_argument("--events", metavar="PATH",
+                    help="CSV of timestamped mission events (t_boot,name)")
     ap.add_argument("--fixed-yaw", action="store_true",
                     help="WP_YAW_BEHAVIOUR=0: hold heading through the whole "
                          "mission instead of turning to face each leg")
     args = ap.parse_args()
 
-    global EKF_LOG
+    # GPS denial needs the vision source configured, which is the --extnav path.
+    if args.gps_denied:
+        args.extnav = True
+
+    global EKF_LOG, EVENT_LOG
+    if args.events:
+        EVENT_LOG = open(args.events, "w")
+        EVENT_LOG.write("t_boot,event\n")
     if args.ekf_log:
         EKF_LOG = open(args.ekf_log, "w")
         EKF_LOG.write("t_boot,n,e,d\n")
@@ -476,15 +542,33 @@ def main():
     # estimator observability it will not get from a pure hover.
     d = -args.alt
     s = args.side
-    for n, e in [(s, 0), (s, s), (0, s), (0, 0), (s, s), (0, 0)]:
+    event(m, "mission_start")
+    legs = [(s, 0), (s, s), (0, s), (0, 0), (s, s), (0, 0)]
+    for i, (n, e) in enumerate(legs):
+        # Deny GPS after ONE leg on GPS. That first leg is the calibration
+        # segment for the analysis: with GPS on, the EKF tracks truth, so it
+        # fixes the rigid transform between ArduPilot's NED frame and the
+        # simulator's, and everything after is measured through it. Denying
+        # from the very start would leave nothing to align against.
+        #
+        # It also means the vehicle is TRANSLATING when GPS goes, not hovering.
+        # A GPS-denied hover is nearly free -- drift is a fraction of distance
+        # travelled and a hovering vehicle travels none -- so a hold test would
+        # pass while proving very little.
+        if args.gps_denied and i == 1:
+            deny_gps(m)
         print(f"[mission] goto N={n} E={e}", flush=True)
         goto_local(m, n, e, d)
+    event(m, "mission_end")
 
     print("[mission] landing", flush=True)
     set_mode(m, "LAND")
     wait_for(m, lambda n, e, d: d > -0.4, 120, "touchdown")
+    event(m, "landed")
     if EKF_LOG is not None:
         EKF_LOG.close()
+    if EVENT_LOG is not None:
+        EVENT_LOG.close()
     print("[mission] done", flush=True)
     return 0
 

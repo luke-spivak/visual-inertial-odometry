@@ -1,0 +1,179 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="iris_runway">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin
+      filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <!-- ogre2 with SOFTWARE rendering. On Apple Silicon under UTM, virgl
+           exposes only OpenGL 2.1 with no core profile, which Ogre2 cannot
+           use (it renders unlit near-black frames). Mesa's llvmpipe gives
+           OpenGL 4.5 core, so the harness sets MESA_LOADER_DRIVER_OVERRIDE
+           =llvmpipe for Gazebo. Slower, but correct. -->
+      <render_engine>ogre2</render_engine>
+      <!-- false => use GLX rather than EGL. Ogre2 on the EGL path explicitly
+           selects a hardware device, which makes Mesa refuse software
+           rendering ("Not allowed to force software rendering when API
+           explicitly selects a hardware device") and then segfault. Under
+           Xvfb there is no hardware GL, so GLX resolves to llvmpipe, which
+           provides the OpenGL 4.5 core profile Ogre2 needs. -->
+      <headless_rendering>false</headless_rendering>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="axes">
+      <static>1</static>
+      <link name="link">
+        <visual name="r">
+          <cast_shadows>0</cast_shadows>
+          <pose>5 0 0.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>10 0.01 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 0.8</ambient>
+            <diffuse>1 0 0 0.8</diffuse>
+            <emissive>1 0 0 0.8</emissive>
+            <specular>0.5 0.5 0.5 0.8</specular>
+          </material>
+        </visual>
+        <visual name="g">
+          <cast_shadows>0</cast_shadows>
+          <pose>0 5 0.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.01 10 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.8</ambient>
+            <diffuse>0 1 0 0.8</diffuse>
+            <emissive>0 1 0 0.8</emissive>
+            <specular>0.5 0.5 0.5 0.8</specular>
+          </material>
+        </visual>
+        <visual name="b">
+          <cast_shadows>0</cast_shadows>
+          <pose>0 0 5.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.01 0.01 10</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0 0 1 0.8</ambient>
+            <diffuse>0 0 1 0.8</diffuse>
+            <emissive>0 0 1 0.8</emissive>
+            <specular>0.5 0.5 0.5 0.8</specular>
+          </material>
+        </visual>
+        <sensor name="navsat_sensor" type="navsat">
+          <always_on>1</always_on>
+          <update_rate>1</update_rate>
+        </sensor>
+      </link>
+    </model>
+    
+    <include>
+      <uri>model://runway</uri>
+      <pose degrees="true">-29 545 0 0 0 363</pose>
+    </include>
+
+    <include>
+      <uri>model://iris_with_vio</uri>
+      <pose degrees="true">0 0 0.195 0 0 90</pose>
+      <!-- Ground truth. The obvious source, /world/<w>/dynamic_pose/info, is a
+           dead end: gz populates entity names and a stamp, but ros_gz_bridge's
+           Pose_V to TFMessage conversion delivers empty parent/child frame ids
+           and stamp 0, which is unusable and fails silently (a recorded bag
+           looks full). OdometryPublisher emits nav_msgs/Odometry directly:
+           correct sim timestamps, and the same message type as the estimate, so
+           evo treats both identically.
+           robot_base_frame is vio_link, not base_link. OpenVINS estimates the
+           pose of the IMU, and a body-frame lever arm between the two is not
+           removed by evo's Umeyama alignment (that takes out one global rigid
+           transform), so it would surface as rotation-dependent error. -->
+      <plugin filename="gz-sim-odometry-publisher-system"
+              name="gz::sim::systems::OdometryPublisher">
+        <dimensions>3</dimensions>
+        <odom_frame>world</odom_frame>
+        <robot_base_frame>vio_link</robot_base_frame>
+        <odom_publish_frequency>100</odom_publish_frequency>
+        <odom_topic>/gz/ground_truth</odom_topic>
+      </plugin>
+    </include>
+
+    <!-- Ground the camera can actually see. The runway's own texture is
+         stretched over 1500 m and minifies to a flat grey at altitude; these
+         visual-only tiles put detail at ~2 cm, just under the 2.6 cm/px GSD
+         at 10 m. Generated by gazebo/worlds/make_ground.py. -->
+    <include>
+      <uri>model://vio_ground</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- Depth structure. Without this every tracked feature lies on the ground
+         plane, which is a monocular degeneracy: see PROJECT.md.
+         Generated by gazebo/worlds/make_feature_field.py. -->
+    <!-- NO vio_feature_field. This world is the PLANAR control: the same
+         generated ground tiles, the same camera, the same mission, and no 3D
+         structure at all.
+
+         It exists because iris_runway_vio.sdf is the wrong control. That world
+         is flat AND untextured -- its runway albedo map is stretched over
+         1500 m and minifies to grey, and the camera gate measures 83 % flat
+         blocks and refuses to fly it. Comparing it against the field world
+         would confound "no depth structure" with "no features", which are
+         different failures with different fixes. Here the texture is identical
+         and only the structure is removed. -->
+
+  </world>
+</sdf>

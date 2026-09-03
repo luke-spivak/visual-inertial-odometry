@@ -272,15 +272,36 @@ sleep 8
 # counts wall clock, and the ratio is whatever the renderer manages.
 rm -f "$RUN/ekf_ready" "$RUN/estimator_ready"
 
+# GPS_DENIED=1 is milestone 5: fly one leg on GPS, then switch EKF3 to the
+# ExternalNav source set, disable the simulated GPS, and fly the rest on vision
+# alone. It IMPLIES the bridge, because without it nothing is feeding vision --
+# and this has to be decided before RUN_BRIDGE is read below, not after.
+if [ "${GPS_DENIED:-0}" = "1" ]; then
+  RUN_BRIDGE=1
+  export RUN_BRIDGE
+  # ...and record the raw sensors, overriding the bridge's usual default of 0.
+  # A GPS-denied flight is the one that can DIVERGE, and a divergence is the
+  # thing you most want to replay offline: only a replay separates a genuine
+  # estimator instability from the live CPU contention between Gazebo, SITL,
+  # the bridge and the estimator. Measured -- one GPS-denied flight held 2.1 m
+  # of error over 155 m while the next sent OpenVINS to 78 km and flew the
+  # vehicle 217 m out of the box, and with no recording there was no way to
+  # tell those two causes apart. The disk is worth it.
+  : "${RECORD_SENSORS:=1}"
+  export RECORD_SENSORS
+fi
+
 MISSION_ARGS=""
 [ "${RUN_BRIDGE:-0}" = "1" ] && MISSION_ARGS="--extnav"
+[ "${GPS_DENIED:-0}" = "1" ] && MISSION_ARGS="$MISSION_ARGS --gps-denied"
 # FIXED_YAW=1 holds heading through the mission. See fly_sim_mission.py: the
 # default turns the vehicle to face each leg, which spins a downward camera's
 # image 90 deg at every corner while it is stationary.
 [ "${FIXED_YAW:-0}" = "1" ] && MISSION_ARGS="$MISSION_ARGS --fixed-yaw"
-# MISSION_SPEED (m/s) sets WPNAV_SPEED. Inter-frame image motion scales with it,
+# MISSION_SPEED (m/s) sets WP_SPD. Inter-frame image motion scales with it,
 # and that is what sets how much reprojection error the tracker makes.
 [ -n "${MISSION_SPEED:-}" ] && MISSION_ARGS="$MISSION_ARGS --speed $MISSION_SPEED"
+MISSION_ARGS="$MISSION_ARGS --events $RUN/events.csv"
 
 # Altitude is an experiment variable, not a constant. At 10 m the 0.4-6 m
 # obstacle field subtends almost nothing and the scene is effectively a plane;

@@ -6,6 +6,8 @@ Build a monocular visual-inertial odometry system on a 5-inch quadcopter that ca
 
 Secondary objective: the sim harness and evaluation framework are reusable for any estimator, and are arguably more valuable than the specific VIO implementation.
 
+**Status of the number, in simulation (2026-09-03): 2.29 % median drift over three flights, 1.91–2.89 % across nine estimator runs, ATE 0.31–0.42 m over a 155 m mission at 96 % coverage.** That is the sim figure and it meets the < 5 % gate. It is not the deliverable: the deliverable is this number on hardware, against measured ground truth, and the sim's own GPS-denied test still fails two flights in three.
+
 ---
 
 ## Current status
@@ -14,11 +16,11 @@ Secondary objective: the sim harness and evaluation framework are reusable for a
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
-| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. Milestone 3 produces a trajectory and an evo comparison, but **the < 5 % drift gate on it is not met**; residual is leg-to-leg magnitude inconsistency, and the untried levers are structural (no-stop mission, stereo) rather than parameters. Milestones 5 and 6 not started |
+| Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across nine runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 is implemented and FAILS: one GPS-denied flight in three held, two flew away** — closed-loop stability is the open problem |
 | Camera bringup | Camera purchased — Pi now available, not yet started |
 | ArduPilot transition | Firmware constraint confirmed, build not yet generated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
-| Vision in the loop | Blocked on all of the above |
+| Vision in the loop | **Sim: works, but not reliably.** Vision reaches EKF3 with correct frames (milestone 4) and has flown 155 m GPS-denied to a 1.39 m final error — once in three attempts. The other two diverged. Closed-loop stability, not accuracy, is the open problem |
 | Evaluation | Blocked |
 
 ---
@@ -370,8 +372,8 @@ TF-Luna on I2C rather than serial specifically to free a UART. Verify exact UART
 2. Camera and IMU topics at sane rates with correct timestamps
 3. VIO produces a trajectory, logged only, compared to Gazebo truth via `evo`
 4. **VIO into ArduPilot with GPS still on** — the milestone that matters most; free frame-convention checking
-5. GPS disabled mid-flight, EKF3 holds position on vision alone
-6. Headless batch runs across altitude/speed/texture, ATE and RPE out
+5. GPS disabled mid-flight, EKF3 holds position on vision alone — **implemented and measured 2026-09-03; does NOT pass. One flight in three held (155 m denied, 1.39 m final error); two diverged, OpenVINS reaching 78 km and 140 km. See below.**
+6. Headless batch runs across altitude/speed/texture, ATE and RPE out — **done 2026-09-03, `harness/sweep.sh`; results below**
 
 **ROS 2 launch arguments silently override YAML.** `subscribe.launch.py` always passes `max_cameras`, `use_stereo`, and `save_total_state` as ROS parameters, using its own defaults when not specified — and ROS parameters beat config-file values. A mono config with `max_cameras: 1` still tries to load `cam1` and dies with "unable to parse all parameters". Launch the sim config as:
 
@@ -984,6 +986,203 @@ are the same resource, seen twice.
 Practical consequences: keep host free space above ~40 GB before a flight
 session, prune `~/vio_runs` deliberately, and treat a VM that vanishes without a
 guest-side log as a host-side kill rather than a sim fault.
+
+### The 16 % is a bounded error, not a drift rate (2026-09-03)
+
+Before reading anything into the headline number, it is worth asking whether it
+is a *rate* at all. RPE over 10 m segments implicitly assumes error accumulates
+with distance; if it does, the percentage is scale-free and comparing a 58 m
+EuRoC sequence with a 156 m flight is fair. Measured across segment lengths on
+the same trajectory:
+
+| RPE delta | mean error | as % of segment |
+|---|---|---|
+| 1 m | 0.248 m | 24.8 % |
+| 2 m | 0.456 m | 22.8 % |
+| 5 m | 0.966 m | 19.3 % |
+| 10 m | 1.597 m | **16.0 %** |
+| 25 m | 3.456 m | 13.8 % |
+| 50 m | 3.100 m | 6.2 % |
+
+The percentage falls monotonically, and the absolute error stops growing past
+25 m — 3.46 m at 25 m, 3.10 m at 50 m. Genuine drift holds a roughly constant
+percentage, because the error grows with the distance. **In open loop this error
+is bounded at ~3 m**, which is consistent with ATE 2.5 m over a 156 m path.
+Quoting it as "16 % per 10 m" takes a bounded offset and divides it by an
+arbitrarily short baseline.
+
+**Why it is bounded, and the caveat.** The mission is a closed circuit — it
+returns to (0,0) three times and to (20,20) twice — so long-lived SLAM features
+are *re-observed*, and OpenVINS keeps up to 50 of them in the state.
+Re-observation anchors the estimate, which is loop closure by another name. This
+mission's numbers therefore overstate what a one-way traverse would do, and any
+claim about GPS-denied range needs an outbound mission to support it.
+
+**It does not meet the gate.** The project's metric is drift as a percentage of
+distance travelled, benchmarked against OpenVINS on EuRoC at 0.72 %/10 m through
+this same evaluation path. On that metric this system reads 15.4–16.0 % and the
+< 5 % gate is not met. The measurements above explain the *character* of the
+error; they do not turn a 16 % into a 5 %.
+
+### Milestone 5: GPS denied mid-flight — and it is NOT reliable (2026-09-03)
+
+**Result: one flight in three held; two diverged catastrophically. Milestone 5
+is implemented and measured, and it does not pass.**
+
+The test is deliberately harder than the milestone's wording. "Holds position on
+vision alone" invites a hover, and a hover is nearly free — drift is a fraction
+of distance travelled and a hovering vehicle travels none. This flies one leg on
+GPS, denies GPS **while translating**, and then flies the remaining square and
+both diagonals on vision.
+
+Denial is two steps and the order matters. Aux function 90 (`EKF_POS_SOURCE`)
+switches EKF3 to source set 2, which milestone 4 configured as ExternalNav and
+verified against GPS; only then does `SIM_GPS1_ENABLE=0` remove the receiver.
+Doing it the other way leaves EKF3 with no horizontal position for a moment and
+trips a failsafe, which tests nothing. Removing the GPS at all is what makes
+this a real test: with the receiver still running, a source-set switch alone
+leaves ArduPilot free to fall back, and a silent fallback would look exactly
+like success — the same shape as the EKF type 10 incident.
+
+`harness/gps_denied_eval.py` scores the **autopilot's** position, not OpenVINS'.
+It recovers the transform between ArduPilot's NED frame and the simulator's from
+the GPS-ON segment alone and measures everything after denial through it, so no
+frame convention is assumed and every reported metre is post-denial.
+
+| flight | distance flown denied | horizontal error mean / max / final | verdict |
+|---|---|---|---|
+| m5 | 155.3 m | 2.10 / 6.10 / **1.39 m** | **held** — 3.92 % max, 0.89 % final |
+| m5b | 224.4 m | 19558 / 74343 / 74304 m | **flyaway** |
+| m5c | — (never completed the box) | EKF reached n = −121.9 km, e = +140.0 km | **flyaway** |
+
+**The first flight alone would have been reported as a pass.** 155 m flown on
+vision with a final error of 1.39 m — 0.89 % of distance travelled — comfortably
+inside the < 5 % gate and by far the best-looking number this project has
+produced. It was not representative. This is the third time in this
+investigation that a single run has told a confident lie, and the only reason it
+did not become a milestone-complete entry is the standing rule about
+distributions.
+
+**What actually fails.** It is OpenVINS, not the bridge or EKF3. In m5b the
+estimator's own `/ov_msckf/odomimu` reached x = 25.6 km, y = 78.1 km,
+z = −16.1 km while ground truth had the vehicle at x = 217 m; EKF3 followed its
+only position source, and ArduPilot flew the aircraft 217 m out of a 20 m box
+chasing waypoints it could not reach. ArduPilot logged repeated
+`EKF3 lane switch` / `primary changed` — both lanes unhappy, no healthy
+alternative to switch to.
+
+**The finding that matters: open-loop stability does not imply closed-loop
+stability.** The identical estimator configuration, replayed offline against
+recorded flights, is stable every time — nine replays across three recordings,
+spread 1.01–1.04×. Put it in the loop and it diverges two flights in three. Two
+mechanisms are available and are not yet separated:
+
+* **CPU contention.** Live, OpenVINS competes with Gazebo's software renderer,
+  SITL, the bridge and the recorder; offline it has the machine. Dropped frames
+  make KLT see large jumps and tracks die. `replay_openvins.sh` has warned about
+  this in its docstring since it was written.
+* **Positive feedback.** A bad estimate steers the vehicle, which worsens the
+  geometry, which worsens the estimate. This mechanism *cannot* exist in replay,
+  and it is the one milestone 5 is uniquely able to expose. In m5b the vehicle
+  left the textured ground entirely (the tiles span ~90 m; it flew to 217 m), at
+  which point recovery was impossible — but that is the end of the story, not
+  the start.
+
+Separating them needs the raw sensors from a diverged flight, which were not
+recorded: `RECORD_SENSORS` defaults to 0 when the bridge is on, because
+milestone 4's evidence was the dataflash log. That default is now wrong and has
+been changed — **a GPS-denied flight is the one most worth being able to replay.**
+
+**The vertical channel is a free improvement.** `EK3_SRC2_POSZ` is ExternalNav,
+so altitude comes from vision. Baro is better and costs nothing; it was left on
+vision only to match the configuration milestone 4 verified.
+
+### Milestone 6, and the gate is met: stop yawing at the corners (2026-09-03)
+
+**Drift 14.64 % → 1.91 %, ATE 1.97 m → 0.31 m, by changing one autopilot
+parameter that has nothing to do with the estimator.** `harness/sweep.sh` flies a
+set of configurations headlessly and tabulates ATE and RPE; the first batch, all
+over one scene generated for the lowest altitude in the sweep so that altitude
+varies alone:
+
+| config | path | drift median (min–max) | ATE | coverage |
+|---|---|---|---|---|
+| `base_a10` — 10 m, default yaw | 156.2 m | 14.64 % (14.01–14.68) | 1.97 m | 96 % |
+| `alt6` — 6 m, default yaw | 148.0 m | 32.17 % (32.10–40.56) | 7.48 m | 96 % |
+| `fixedyaw` — 10 m, `WP_YAW_BEHAVIOR=0` | 155.3 m | **1.91 % (1.91–2.19)** | **0.31 m** | 96 % |
+| `fixedyaw_b` — repeat flight | 155.4 m | **2.29 % (2.08–2.30)** | 0.42 m | 96 % |
+| `fixedyaw_c` — repeat flight | 155.4 m | **2.72 % (2.55–2.89)** | 0.39 m | 96 % |
+| `flat_ctrl` — fixed yaw, **no obstacles at all** | 155.0 m | **1.85 % (1.85–1.88)** | 0.38 m | 96 % |
+
+Every row is three replays of one recorded flight; the three `fixedyaw` rows are
+three separate FLIGHTS, so the headline carries both kinds of variance —
+replay-to-replay and flight-to-flight. Nine estimator runs across three flights
+span 1.91–2.89 %. Every row covers 96 % of its flight, and the coverage column is
+there because a truncated estimate scores better: the comparison is only
+meaningful because the spans match.
+
+**The planar control settles the founding hypothesis for good.**
+`flat_ctrl` is the same mission, the same camera, the same generated ground
+tiles and the obstacle field **entirely removed** — a textured plane, the exact
+configuration this project was designed to avoid. It scores 1.85 %, as good as
+or better than the structured scene. Combined with the earlier direct
+measurement (5.03 px of parallax at p95 in the structured world), the monocular
+planar degeneracy is refuted twice over and by two independent methods. **The
+3D obstacle field contributes nothing to accuracy here.** It cost RTF, scene
+complexity and a collision constraint that shaped the whole altitude analysis,
+and the flat world would have done as well.
+
+**Against the reference points this project set itself:** OpenVINS on EuRoC
+V1_01_easy gives 0.72–0.80 %/10 m and 0.067–0.115 m ATE over 58 m. This is
+**2.29 % median over three flights (1.91–2.89 % across nine runs)** and
+0.31–0.42 m ATE over 155 m. Same order of magnitude, on a longer flight, from a
+simulated quadrotor. **The < 5 % gate for Phase 3 step 5 is met.**
+
+**What was actually wrong.** ArduPilot ships `WP_YAW_BEHAVIOR=2`, "face the next
+waypoint", so a position target with the yaw bits masked off still turns the
+vehicle at every corner of the square — measured at 16–30° per corner, while the
+vehicle is stopped. The camera points DOWN, so vehicle yaw is a rotation of the
+whole image about its centre. OpenVINS' front end is pyramidal KLT, which models
+translation only. The long-lived SLAM features are exactly the tracks that
+cannot survive that: measured across the first corner, the SLAM feature count
+collapses 49 → 3. The filter loses its long-term constraints at every corner and
+never fully recovers.
+
+**Altitude, now measured rather than argued.** 6 m is more than twice as bad as
+10 m — 32.2 % against 14.6 %, ATE 7.48 m against 1.97 m — on the identical scene,
+with altitude the only variable. That confirms the geometric prediction that
+redirected the original "fly at 4 m" plan: over a field with collision geometry,
+flying lower forces shorter obstacles under the vehicle and flattens the scene
+rather than enriching it, while cutting feature dwell time.
+
+**A reasoning error worth recording, because it nearly buried this.** The yaw
+hypothesis was raised early and dismissed on the strength of `turn_diagnostic.py`,
+which showed the estimate's yaw tracking ground truth to within 0.7° at every
+corner. That measurement was correct and the inference from it was wrong.
+Tracking a rotation accurately in the STATE says nothing about whether that
+rotation destroyed the FEATURE TRACKS — the gyro integrates through a turn
+perfectly well while KLT loses every long-lived correspondence. Two different
+subsystems, one of which was measured and the other assumed. The lesson
+generalises: a diagnostic that clears one mechanism does not clear a second
+mechanism that happens to share a cause.
+
+**Scope, honestly.** This is an operational fix, not an algorithmic one. Holding
+heading is free here because the camera points down and the mission does not
+care where the nose is. It is not free in general — survey patterns, gimbal
+pointing and forward-facing sensors all want yaw — so the underlying fragility
+remains: **this front end degrades badly under in-place rotation.** The
+algorithmic fixes are a rotation-aware tracker, or stereo. Also untested is
+whether fixed yaw alone would have been enough without the chi-squared fix; the
+two were applied in sequence and only the combination has been measured.
+
+**And the flat-runway control failed for an instructive reason.** The sweep's
+`flat_runway` config never flew: the camera gate measured **83 % flat blocks** in
+`iris_runway_vio.sdf` and refused. That world is flat *and* untextured — its
+runway albedo map is stretched over 1500 m and minifies to grey at altitude — so
+it confounds "no depth structure" with "no features", which are different
+failures with different fixes. `gazebo/worlds/iris_flat_vio.sdf` is the correct
+control: identical generated ground tiles, identical camera and mission, and the
+obstacle field removed.
 
 ---
 
