@@ -19,7 +19,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
-| Camera bringup | Camera purchased — Pi now available, not yet started |
+| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
 | ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
@@ -1310,6 +1310,204 @@ obstacle field removed.
 
 ---
 
+## Camera bringup
+
+### The camera that reported success and returned zeros (2026-09-07)
+
+First light on the OV9281. `rpicam-still` ran without error, printed `Still
+capture image received`, and wrote a PNG in which **every pixel was exactly
+zero** — 3,072,000 of them, one distinct value, in both a 640×400 and a
+1280×800 capture.
+
+Two diagnoses suggested themselves and both were wrong.
+
+**Wrong read 1: underexposure.** It is the obvious one and it is refutable
+without touching the camera. An underexposed global-shutter sensor still
+delivers read noise, so a dark frame has a spread of small values. `distinct=1`
+across three million pixels is not darkness; it is absence. *Measuring the
+frame rather than looking at it settled this in one command* — the same lesson
+as the black-image investigation of 2026-08-31, arrived at from the opposite
+direction.
+
+**Wrong read 2: the missing tuning file.** PROJECT.md had carried an open
+question predicting exactly this failure, and the build plan told the future
+reader to expect libcamera to *error* on a missing JSON. It does not error,
+because nothing is missing: `ov9281_mono.json` ships with Pi OS 13 and the log
+says it loaded. **A standing prediction that matches the symptom is not a
+diagnosis**, and this one cost a detour.
+
+**What actually located it was the AGC.** `rpicam-raw` logs its converged
+exposure per frame:
+
+```
+#6 (30.00 fps) exp 14994.00 ag 1.44 dg 1.03      ... held for 35+ frames
+```
+
+15 ms at 1.44× analogue gain, stable. A sensor delivering zeros would drive the
+AGC to its rails, hunting for light that is not there. Instead it settled at a
+moderate value and stayed. **The ISP's statistics engine was seeing a correctly
+exposed image at the same instant the output stream produced nothing** — which
+places the fault after the statistics tap and before the output, and rules out
+sensor, CSI link, driver and exposure in one observation.
+
+The configuration line names it:
+
+```
+configuring streams: (0) 640x400-BGR888/sRGB (1) 640x400-MONO_PISP_COMP1/RAW
+```
+
+`ov9281_mono.json` is a *mono* tuning file with no colour pipeline — the
+accompanying `Could not set SHARPNESS - no sharpen algorithm` warning is the
+same file saying so. Ask that pipeline to emit BGR888/sRGB from a sensor with
+no Bayer pattern and the conversion yields zeros. Stream 1, the RAW one, was
+correct the whole time.
+
+**The fix is not to fix it.** The processed path was never the right one for
+this project and would have been wrong even had it worked: `sRGB` applies a
+gamma transfer function, which is a nonlinear intensity transform sitting
+directly in front of a corner detector, on a project whose camera section
+([PROJECT.md:104](PROJECT.md:104)) already rejects processed output on exactly
+those grounds. **All camera capture from here — focus, Kalibr, flight
+recording — goes through `rpicam-raw`.** `harness/focus_check.py` does, and
+documents why in its docstring.
+
+**Layout detail that will bite anyone who skips it.** The R8 mode delivers a
+**Y16 container with the 8-bit data in the high byte** — every value in the
+file is an exact multiple of 256. mono8 is `raw >> 8`. Treat it as a 16-bit
+image and you get a plausible-looking result that is wrong by a factor of 256;
+truncate the wrong byte and you get zeros again, for an entirely different
+reason. `focus_check.py` asserts the multiple-of-256 property rather than
+assuming it.
+
+**Confirmed in passing, and it matters for the bracket.** The mode table
+answers the binning-versus-cropping question that the camera-IMU bracket's §7
+geometry depends on:
+
+| Output | Readout region | Reading |
+|---|---|---|
+| 640×400 | `(0,0)/1280x800` | full array, 2× downsample — **full FOV** |
+| 1280×720 | `(0,0)/1280x720` | 80 rows unread, and off-centre — avoid |
+| 1280×800 | `(0,0)/1280x800` | full array, 1:1 |
+
+The field varies per mode, so it describes each mode's readout region rather
+than the sensor size. **640×400 preserves the full lens field**, so the 30° tilt
+and the `CAM_Y = +120` prop-clearance margin hold as designed. Note this
+establishes that the *array* is fully read — the specific figure of 118° H is
+still a datasheet claim, and one the manual already self-contradicted, until
+Kalibr measures it.
+
+**Focus baseline, for step 6.** As-shipped, indoors, at 15 ms / gain 1:
+**focus score 5.5** (noise-suppressed), 16×16 block stddev median 1.71, no
+clipping. The lens is far out of focus, which is expected and is what
+[PROJECT.md:106](PROJECT.md:106) predicted once the real 2.8 mm focal length
+moved hyperfocal to ~0.9 m. That number is the floor to beat; expect a large
+multiple, not a few percent.
+
+**The 100 m target requirement is over-specified.** Derived for this lens
+(f = 2.8 mm, f/2.8, 3 µm pixels), the blur at infinity caused by focusing on a
+nearer target:
+
+| focus target | blur at infinity |
+|---|---|
+| 2 m | 0.47 px |
+| 10 m | 0.09 px |
+| 20 m | 0.05 px |
+| 50 m | 0.02 px |
+| 100 m | 0.01 px |
+
+**Anything past ~20 m is optically indistinguishable from infinity here**, so a
+50 m backyard is a fine venue and the build plan's 100 m is conservative by a
+wide margin. What distance actually buys is *measurement sensitivity* — far
+scenes put real texture at pixel scale, which is where defocus bites first —
+not optical correctness.
+
+Point it at the fence line or treetops rather than across the lawn, so the
+frame is not half near-ground. (`focus_check.py --roi` can restrict scoring to
+a window if that is ever awkward, but aiming solves it.)
+
+**And the metric needed fixing before it could be trusted.** The naive
+Laplacian variance the build plan calls for **cannot distinguish sharp detail
+from sensor noise** — both are abrupt pixel-to-pixel variation. Measured on the
+same static bench scene, same focus, only the exposure changed:
+
+| exposure | raw Laplacian | noise-suppressed | raw/smoothed |
+|---|---|---|---|
+| 15 ms, gain 1 | 35.3 | **5.50** | 6.4 |
+| 2 ms, gain 4 | 102.3 | **3.68** | 27.8 |
+
+The raw metric says the short exposure is **3× sharper**. It is not; it is
+noisier, and slightly worse. A focus sweep run on the raw number at high gain
+would have chased the noise floor and locked the lens at the wrong place —
+then been threadlocked there, permanently, before Kalibr.
+
+`harness/focus_check.py` therefore scores a lightly blurred copy (3×3
+binomial) and ranks on that: real edges survive the blur, single-pixel noise
+does not. It reports the raw/smoothed ratio as a running check — high early in
+a sweep is honest (a defocused frame genuinely has no detail) and should fall
+as focus improves; still high at the peak means the gain is too high.
+**Compare scores only at fixed exposure and gain.**
+
+### Timestamps: the highest-risk item, measured and passed (2026-09-07)
+
+Requirement 2 of the camera derivation ([PROJECT.md:80](PROJECT.md:80)) makes
+timestamp *variance* the thing that matters — a constant camera-IMU offset is
+estimated online as `calib_camimu_dt`, a varying one is unmodelable. PROJECT.md
+called this the highest-risk item in the build and the reason the Pi was chosen
+over faster boards. `harness/cam_timing.py` measures it. 300 frames, exposure
+and gain pinned, `main` stream shrunk to 64×64 so the ISP is not in the way:
+
+| | frame-to-frame stdev | spread |
+|---|---|---|
+| **`SensorTimestamp`** | **0.60 µs** | 4 µs |
+| Arrival time in userspace | 49 µs | 1012 µs |
+
+**Userspace arrival is 82× noisier than the hardware stamp**, and zero frames
+were dropped over 300. That ratio is the CSI-over-UVC decision at
+[PROJECT.md:86](PROJECT.md:86) measured rather than argued — a UVC camera
+forces the 49 µs column. It also gets *worse* under load: at 60 fps arrival
+jitter rose to 439 µs while `SensorTimestamp` jitter improved to 0.39 µs. The
+two paths diverge in opposite directions exactly when it matters.
+
+**Clock, confirmed by comparison rather than assumption.** `SensorTimestamp`
+sits ~7 ms behind `CLOCK_MONOTONIC` and ~1.8 × 10¹² ms from `CLOCK_REALTIME`,
+so it is on the monotonic timebase. **Linux IIO defaults to `CLOCK_REALTIME`,
+which is NTP-disciplined and can step backwards mid-flight.** Before the IMU is
+trusted, it has to be moved onto the same timebase:
+
+```
+cat  /sys/bus/iio/devices/iio:device0/current_timestamp_clock
+echo monotonic | sudo tee /sys/bus/iio/devices/iio:device0/current_timestamp_clock
+```
+
+This is the single point where the two sensors are made to agree, and getting
+it wrong produces drift that looks like an estimator problem.
+
+**Frame rate is delivered 4.2 % long, at every rate.** Requested versus
+achieved, measured three times:
+
+| requested | achieved | ratio |
+|---|---|---|
+| 30.0 fps | 28.8 fps | 0.960 |
+| 20.0 fps | 19.2 fps | 0.960 |
+| 60.0 fps | 57.6 fps | 0.960 |
+
+A constant multiplicative factor of exactly 0.96, not a quantisation to whole
+readout lines (which would be a roughly fixed absolute offset, not a
+proportional one). Mechanism unresolved and it does not block anything, because
+**the estimator consumes timestamps, not a nominal rate.** It matters wherever
+a nominal rate is *assumed*: CPU budgeting per frame, exposure limits derived
+from a frame period, and any comparison against the sim's configured camera
+rate. Assume 0.96 × requested until the cause is found.
+
+**Method note.** Both wrong reads shared a shape: a plausible cause that
+explained the symptom, adopted before any measurement discriminated between
+causes. The thing that resolved it was a number nobody had asked for — the
+AGC's converged exposure — which happened to be visible in a log already being
+printed. Turning the log level up before forming a hypothesis would have been
+faster than either guess.
+
+---
+
 ## Rejected options
 
 | Rejected | Why |
@@ -1350,7 +1548,9 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 - Battery capacity, connector, and health unverified (cell count confirmed 4S).
 - ~~Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder~~ — **answered 2026-09-03 by building it: yes, with 98 KB to spare.** See below. The binding constraint was never flash; it is that both features are compiled out by *source default* on a 1024 KB board.
 - 3D printing is now optional, not blocking — only the camera+IMU bracket needs rigidity and it is hand-cuttable from FR4. Printer purchase deferred until mount iteration actually bottlenecks.
-- Camera works on **Cam0 port only** on Pi 5 per user reports; a missing libcamera tuning JSON in default Raspbian requires vendor support to resolve.
+- Camera works on **Cam0 port only** on Pi 5 per user reports. ~~A missing libcamera tuning JSON in default Raspbian requires vendor support to resolve~~ — **answered 2026-09-07: it is not missing.** `/usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json` ships with Pi OS 13 and loads without complaint. The real trap was elsewhere and is silent rather than loud — see *The camera that reported success and returned zeros*.
+- **Why frame duration is delivered 4.2 % long** — exactly 0.96 × requested at 20, 30 and 60 fps. Proportional, so not line quantisation. Harmless (timestamps are what the estimator reads) but unexplained.
+- Whether the OV9281's 640×400 mode bins or skips. FOV is preserved either way (confirmed binned-not-cropped), but skipping aliases, which would cost feature repeatability frame to frame. Test: compare `count_features.py` on a native 640×400 capture against a software-downscaled 1280×800 one.
 - Whether gz's `dynamic_bias_stddev` is also per-sample. The white-noise `<stddev>` question is answered (it is); the bias terms were not measured.
 - **What takes the sim from 16 % drift to the < 5 % gate.** ATE is already 1.6 % of path length; the residual is local (RPE), i.e. tracking noise, and the parameter absorbing it (`up_*_sigma_px` = 4) is a measurement of that noise. The untested lever is what causes it: ~15 px of inter-frame image motion at 5.8 m/s and 15.2 Hz effective tracking. Flying slower is the direct test.
 - **Whether the chi-squared gate is the same story on hardware.** In sim the fix was worth 6× in drift and 95× in ATE. Real imagery has motion blur, vibration and genuine outliers, so the right `sigma_px` will differ — but the diagnostic transfers exactly: count the features the filter *uses* per update, and if that goes to zero while the images are still trackable, the gate is the problem.
@@ -1381,5 +1581,7 @@ Out of reach on this platform: real-time deep learning perception (no NPU, weak 
 - ArduPilot custom build: `custom.ardupilot.org` (order matters: vehicle → version → board)
 - Firmware features: `firmware.ardupilot.org/Copter/stable/speedybeef4v4/features.txt`
 - Frame CAD: `github.com/tbs-trappy/source_one`
-- Camera driver: `dtoverlay=ov9281` in `/boot/firmware/config.txt`, Cam0 only
+- Camera driver: `dtoverlay=ov9281,cam0` in `/boot/firmware/config.txt`, Cam0 only. Set `camera_auto_detect=0` alongside it
+- Camera tools: `rpicam-*` on Pi OS Bookworm and later, **not** `libcamera-*` (renamed; `rpicam-apps-lite` is the headless package). Capture via `rpicam-raw` only — the processed RGB path returns zeros, see *Camera bringup*
+- Camera tuning file: `/usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json`, ships with Pi OS 13 (Pi 5 uses the `pisp` IPA path, not `vc4`)
 - Benchmarks cited: SMF-VO, arXiv 2511.09072 (Pi 5 VIO timings); Isaac ROS cuVSLAM (Jetson comparison)
