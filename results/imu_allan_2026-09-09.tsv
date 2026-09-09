@@ -1,0 +1,7 @@
+sensor	axis	N	B	tau_B_s	K	unit_N	unit_B	unit_K
+accel	x	4.6968e-04	3.9857e-04	24.8	2.5225e-05	m/s^2/sqrt(Hz)	m/s^2	m/s^2*sqrt(Hz)
+accel	y	4.5908e-04	3.9193e-04	220.6	2.6060e-05	m/s^2/sqrt(Hz)	m/s^2	m/s^2*sqrt(Hz)
+accel	z	5.3678e-04	3.9659e-04	19.9	4.6828e-05	m/s^2/sqrt(Hz)	m/s^2	m/s^2*sqrt(Hz)
+gyro	x	1.0410e-04	1.7679e-05	197.8	1.2293e-06	rad/s/sqrt(Hz)	rad/s	rad/s*sqrt(Hz)
+gyro	y	9.0497e-05	2.0787e-05	114.5	1.7491e-06	rad/s/sqrt(Hz)	rad/s	rad/s*sqrt(Hz)
+gyro	z	7.3821e-05	1.6597e-05	341.7	7.1732e-07	rad/s/sqrt(Hz)	rad/s	rad/s*sqrt(Hz)

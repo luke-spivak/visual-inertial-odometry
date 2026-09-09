@@ -133,6 +133,24 @@ def fixed_slope_fit(taus, sigmas, slope, at_tau, tols=(0.15, 0.25, 0.35)):
     return None, None
 
 
+def clip(arr, start_s, end_s):
+    """Keep only samples in [start, end) seconds from the first sample.
+
+    Exists because a bench run can be disturbed at a known moment -- someone
+    walks past -- and that is not a timestamp gap, so nothing else in here would
+    catch it. Trimming is a claim about the data, so it is a flag you pass and a
+    line the report prints, never something applied quietly."""
+    if start_s is None and end_s is None:
+        return arr
+    t = (arr["in_timestamp"].astype(np.int64) - int(arr["in_timestamp"][0])) * 1e-9
+    keep = np.ones(len(arr), dtype=bool)
+    if start_s is not None:
+        keep &= t >= start_s
+    if end_s is not None:
+        keep &= t < end_s
+    return arr[keep]
+
+
 def analyse(kind, meta, arr, unit):
     prefix = "in_accel_" if kind == "accel" else "in_anglvel_"
     ts = arr["in_timestamp"]
@@ -257,9 +275,17 @@ def emit_yaml(acc, gyr):
 
 
 def plot(acc, gyr, path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        # The numbers are the deliverable and they have already been printed.
+        # Losing them to a traceback over a missing plotting library, after a
+        # three-hour capture, would be absurd.
+        print(f"\nno matplotlib here, skipping {path} "
+              f"(the numbers above are unaffected)")
+        return
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     for ax_plot, res, title, unit in ((axes[0], acc, "accelerometer", "m/s^2"),
@@ -284,10 +310,23 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sidecar", help="the .json written by imu_log.py")
     ap.add_argument("--plot", help="write a log-log Allan plot here")
+    ap.add_argument("--start", type=float, default=None,
+                    help="drop everything before this many seconds in")
+    ap.add_argument("--end", type=float, default=None,
+                    help="drop everything from this many seconds in (e.g. a bumped bench)")
     args = ap.parse_args()
 
     acc_meta, acc_arr = load(args.sidecar, "accel")
     gyr_meta, gyr_arr = load(args.sidecar, "gyro")
+
+    if args.start is not None or args.end is not None:
+        n0 = len(acc_arr)
+        acc_arr = clip(acc_arr, args.start, args.end)
+        gyr_arr = clip(gyr_arr, args.start, args.end)
+        print(f"TRIMMED to [{args.start or 0:.0f}, "
+              f"{args.end if args.end is not None else float('inf'):.0f}) s: "
+              f"{len(acc_arr)}/{n0} samples kept "
+              f"({100*len(acc_arr)/n0:.1f}%)")
 
     acc = analyse("accel", acc_meta, acc_arr, "m/s^2")
     gyr = analyse("gyro", gyr_meta, gyr_arr, "rad/s")
