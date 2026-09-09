@@ -17,7 +17,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Phase | State |
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
-| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. Overlay written but not yet installed; Allan run (`harness/imu_log.py`, `harness/allan.py`) not yet started |
+| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run does not need it and is running**: 3 h stationary via `harness/imu_log_spidev.py`, straight off the hardware FIFO over spidev, no root. Part delivers **440 Hz for a requested 416**. Two-minute gate passed: 100 % contiguous, 0 overruns, 7.3/4.1 LSB resolution, short-tau slope -0.40 to -0.47 |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
 | ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
@@ -1558,6 +1558,70 @@ clock is the first suspect and the wiring is the last;
 `harness/imu_probe.py` sweeps clock and mode and prints the matrix rather than
 assuming a speed. That sweep exists because the first version of the probe
 assumed 1 MHz and confidently reported a healthy part as dead.
+
+### Pi OS does not build the driver this part needs (2026-09-09)
+
+The overlay loads correctly — `/dev/spidev0.0` disappears as intended, and
+`spi0.0` appears with `compatible = "st,ism330dhcx"` and modalias
+`spi:ism330dhcx`. Nothing binds to it, because **the driver does not exist on
+this system**:
+
+```
+$ grep LSM6DSX /boot/config-6.18.39+rpt-rpi-2712
+# CONFIG_IIO_ST_LSM6DSX is not set
+$ find /lib/modules/$(uname -r) -name '*lsm6*'      # nothing
+```
+
+Pi OS ships 55 IIO modules and exactly two IMU drivers, `inv-mpu6050` and
+`bno055`. The claim at [PROJECT.md:119](PROJECT.md:119) that the ISM330DHCX has
+a "mainline `st_lsm6dsx` IIO driver" is true of upstream and false of the
+kernel actually running, and nothing in the part-selection reasoning checked the
+distribution rather than upstream. Kernel headers **are** installed for the
+running kernel, so an out-of-tree build is the fix, and it is not done yet.
+
+**It does not block the Allan run, and that is a fact about the part rather
+than a workaround.** Allan variance needs a long stationary series that is
+uniformly sampled; the ISM330DHCX samples and buffers on its own schedule in
+hardware, which is [the property it was chosen for](PROJECT.md:121). Draining
+that FIFO from userspace yields the same samples the kernel driver would have
+handed over. The driver matters when IMU samples have to share a clock with
+camera frames — Phase 6, not this.
+
+`harness/imu_log_spidev.py` does that, and needs no root. Two consequences of
+the overlay had to be worked around: `spidev0.0` is gone, so transfers go out on
+`/dev/spidev0.1` whose CE1 (GPIO7, pin 26) toggles into thin air with nothing
+wired to it; and GPIO8 is still held by the SPI core for the unbound `spi0.0`,
+so `gpiod` cannot claim it and `pinctrl` drives the pad directly. Gated the
+usual way: **10/10 correct WHO_AM_I with the CS assert, 0/5 without it**, so it
+is the assert doing the work.
+
+### The IMU delivers 440 Hz when asked for 416 (2026-09-09)
+
+Measured over two minutes against the host monotonic clock, twice: **439.84 and
+440.09 Hz for a requested 416 Hz, +5.8 %**, with zero FIFO overruns. Plain
+internal-oscillator tolerance, uncalibrated.
+
+The same shape as the camera's [4.2 % long frame rate](PROJECT.md:1493), and
+the same lesson: **the estimator consumes timestamps, not a nominal rate**, and
+anything that assumes the nominal rate is wrong by that much. The first version
+of the logger stamped samples at `i / 416`, which would have stretched every tau
+by 5.8 % and inflated the noise density read off it by about 3 % — a systematic
+error, invisible in the output, in the number the whole run exists to produce.
+It now interpolates against the host clock between FIFO drain boundaries, so
+the true rate falls out of the data instead of being asserted.
+
+Worth carrying into Phase 6: whatever finally publishes IMU samples must not
+assume 416 Hz either.
+
+### The `pkill` trap, paid for twice (2026-09-09)
+
+[PROJECT.md:472](PROJECT.md:472) already records that `pkill -f` matches the
+shell that issued it when the pattern is in that shell's own command line. Used
+it anyway inside an `ssh` command line to clear a stale capture; it killed the
+SSH session before the launch line ran, and the three-hour run silently did not
+start. The fix was already written down: **use it from inside a script file**,
+which is what `harness/start-allan.sh` now does. Reading the repo before acting
+would have been faster than rediscovering it.
 
 ### Verified good, on raw spidev, before any overlay
 
