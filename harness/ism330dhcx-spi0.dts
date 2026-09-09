@@ -1,0 +1,58 @@
+/*
+ * ism330dhcx-spi0.dts — bind the ISM330DHCX to SPI0 CE0 with INT1 on GPIO25.
+ *
+ * The kernel driver (st_lsm6dsx) needs the interrupt: without it you get only
+ * polled sysfs reads, and the whole point of this part is the hardware FIFO
+ * with per-sample timestamping (PROJECT.md:119). spidev0 is disabled so the
+ * driver can claim CE0 instead of the userspace chardev.
+ *
+ * Build and install on the Pi:
+ *   dtc -@ -I dts -O dtb -o ism330dhcx-spi0.dtbo ism330dhcx-spi0.dts
+ *   sudo cp ism330dhcx-spi0.dtbo /boot/firmware/overlays/
+ *   echo 'dtoverlay=ism330dhcx-spi0' | sudo tee -a /boot/firmware/config.txt
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2712", "brcm,bcm2711", "brcm,bcm2835";
+
+    /* Release CE0 from the spidev chardev. */
+    fragment@0 {
+        target = <&spidev0>;
+        __overlay__ {
+            status = "disabled";
+        };
+    };
+
+    fragment@1 {
+        target = <&spi0>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "okay";
+
+            ism330dhcx@0 {
+                compatible = "st,ism330dhcx";
+                reg = <0>;
+                spi-max-frequency = <10000000>;
+
+                /* ISM330DHCX SPI is documented as mode 3 (CPOL=1, CPHA=1).
+                 * If the part does not probe, delete these two lines to try
+                 * mode 0 -- ST parts commonly accept both and the datasheet
+                 * only guarantees one. */
+                spi-cpol;
+                spi-cpha;
+
+                /* INT1 -> GPIO25 (header pin 22), rising edge.
+                 * GPIO2/3 are reserved for I2C (compass, TF-Luna) and GPIO3
+                 * doubles as the shutdown button, see PROJECT.md:185. */
+                interrupt-parent = <&gpio>;
+                interrupts = <25 1>;
+
+                status = "okay";
+            };
+        };
+    };
+};
