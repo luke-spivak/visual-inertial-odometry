@@ -17,7 +17,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Phase | State |
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
-| Pi + IMU bench bringup | **In progress** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. Next: IMU wiring |
+| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. Overlay written but not yet installed; Allan run (`harness/imu_log.py`, `harness/allan.py`) not yet started |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
 | ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
@@ -1508,6 +1508,86 @@ faster than either guess.
 
 ---
 
+## IMU bringup
+
+### The bus works at 10 MHz and nowhere else (2026-09-09)
+
+The ISM330DHCX went onto SPI0 CE0 with INT1 on GPIO25. First contact over raw
+`spidev` returned `0x00` for WHO_AM_I at 1 MHz, in both SPI modes, on both chip
+selects. Read as a wiring fault it points at MISO; it was not a wiring fault.
+
+**What the bus actually does**, WHO_AM_I over `/dev/spidev0.0`, 20 reads each:
+
+| clock | correct |
+|---|---|
+| 100 kHz – 9 MHz | **0/20 at every speed** |
+| 10 MHz | **20/20** |
+| 12 MHz | 10/20 |
+| 16 MHz, 20 MHz | 0/20 (past the part's rated 10 MHz) |
+
+A single working point, at the part's rated maximum, with total failure one
+megahertz below it. Three things rule out the obvious readings:
+
+- **It is not signal integrity.** That degrades with speed; this is the
+  opposite, and 10 MHz is reproducible 20/20 across six rounds spread over
+  minutes.
+- **It is not the wiring, and not the part.** Bit-banging the identical pins
+  through `gpiod` at roughly 25 kHz returns `0x6B` every time. The part answers
+  fine when something else generates the clock.
+- **It is not the read path.** Writing `CTRL1_XL` at 100 kHz and reading it back
+  at 10 MHz shows the write never landed. The whole transaction fails, and an
+  all-zero response means SDO was never driven at all — the part never leaves
+  I2C mode, which is what a slave does when it does not see a clean frame.
+
+CS was confirmed to toggle, `cs-gpios` is present on the `snps,dw-apb-ssi`
+controller, and the measured bit rate at 100 kHz is 99.9 kbit/s, so the clock
+frequency itself is correct. **Root cause unresolved** — the remaining
+candidate is the RP1 controller's framing at CS assertion, whose duration
+scales with the clock period and so would only be short enough to ignore at the
+top of the range. `SPI_NO_CS` returns `EINVAL` on this controller, which closes
+the cheapest way to isolate it.
+
+**It does not block anything**, because the one working point is the one the
+driver wants: `spi-max-frequency = <10000000>` in
+`harness/ism330dhcx-spi0.dts`. Mode 0, not the datasheet's mode 3 — 8/8 against
+7/8 measured at 10 MHz.
+
+**What it costs is margin.** The part runs at its rated maximum with none, on a
+vehicle, for the life of the project. If the IMU ever stops enumerating, the
+clock is the first suspect and the wiring is the last;
+`harness/imu_probe.py` sweeps clock and mode and prints the matrix rather than
+assuming a speed. That sweep exists because the first version of the probe
+assumed 1 MHz and confidently reported a healthy part as dead.
+
+### Verified good, on raw spidev, before any overlay
+
+Deliberately before installing the device tree overlay: a driver that fails to
+probe reports "failed" and little else, and a dead MISO, a swapped clock and
+data pair, an unpowered part and a wrong SPI mode all look identical from
+there.
+
+| check | result |
+|---|---|
+| WHO_AM_I | **0x6B**, 8/8 at 10 MHz mode 0 |
+| Gravity, stationary | **9.6302 m/s²** against 9.80665 — 1.8 % low, ordinary uncalibrated sensitivity tolerance, and what Kalibr is for |
+| Gyro at rest | **0.79 dps** total, within the part's zero-rate offset spec |
+| Temperature | 18.3 °C, plausible and confirms the channel |
+| INT1 on GPIO25 | asserts on data-ready, clears on read, 5/5 |
+| Burst reads | 1024 B in 0.92 ms at 10 MHz, ≈8.9 Mbit/s |
+| Tagged FIFO | 264 samples buffered, both sensor tags present |
+
+**A pin-level trick worth keeping.** Before the part would talk, the useful
+measurement was a pull-up/pull-down sweep of every header GPIO: a pin with
+nothing on it follows the pull, a pin with something attached does not. That
+map showed MOSI and SCLK held high by the breakout's I2C pull-ups (which only
+exist if the board is powered), MISO held low by its address-select pull-down,
+INT1 driven low by the part, and CS held high by the part's internal pull-up —
+against every other header pin floating cleanly as a control. It proved all
+seven wires and the power rail without a multimeter, and narrowed the fault to
+the controller before a single clip was touched.
+
+---
+
 ## Rejected options
 
 | Rejected | Why |
@@ -1536,6 +1616,7 @@ Recorded because the failure mode is systematic, not incidental.
 - **"Skip the 27 W power supply"** — reasoned from the flight configuration (BEC-powered) and ignored that weeks of bench work come first, where a wall supply is required.
 - **Amazon search results** — a "raspberry pi 5" query surfaced a Pi 4 kit as result #2, because accumulated reviews outrank relevance. B07-prefix ASINs are 2019; anything genuinely Pi 5 is B0C or later.
 - **BEC "5 A" listings** — three consecutive Amazon results matching "5 V / 5 A BEC" were 1.5–3 A continuous. FPV BEC marketing quotes peak universally.
+- **"Start slow on a new SPI bus"** — the standard conservative move, and exactly backwards on RP1: 100 kHz through 9 MHz fail completely while 10 MHz is perfect. The first IMU probe hardcoded 1 MHz and reported a healthy, correctly wired part as dead. Sweep the parameter you are about to assume, especially when the assumption is the cautious one.
 - **BNO085 recommendation reversal** — recommended over BMI270 in the OAK-D context (comparing two options you don't control, where DepthAI exposes raw output), then rejected for standalone use. Both are correct in context; the earlier statement was scoped and read as general.
 
 The pattern: pattern-matching from adjacent cases produces plausible answers that fail on specifics. Verify SKUs, URLs, and continuous ratings rather than inferring them.

@@ -36,14 +36,27 @@
             ism330dhcx@0 {
                 compatible = "st,ism330dhcx";
                 reg = <0>;
+                /* 10 MHz is not a ceiling here, it is the only value that
+                 * works, and that was measured rather than chosen.
+                 *
+                 * On this Pi 5 the RP1 controller talks to this part at 10 MHz
+                 * and nowhere else: 100 kHz through 9 MHz fail completely and
+                 * identically -- writes as well as reads, every read returning
+                 * 0x00 -- while 12 MHz is intermittent and 16 MHz and above are
+                 * past the part's rated maximum. A GPIO bit-bang of the same
+                 * pins returns the right answer at ~25 kHz, so the wiring and
+                 * the part are fine and the controller's framing is not.
+                 *
+                 * The prior that low SPI clocks are the safe, conservative
+                 * choice is exactly backwards on this hardware. It also means
+                 * the part runs at its rated maximum with no margin, so if this
+                 * ever stops probing, suspect the clock before the wiring:
+                 * harness/imu_probe.py sweeps and prints the matrix.
+                 *
+                 * Mode 0, not the datasheet's mode 3: measured 8/8 correct
+                 * against 7/8 at 10 MHz.
+                 */
                 spi-max-frequency = <10000000>;
-
-                /* ISM330DHCX SPI is documented as mode 3 (CPOL=1, CPHA=1).
-                 * If the part does not probe, delete these two lines to try
-                 * mode 0 -- ST parts commonly accept both and the datasheet
-                 * only guarantees one. */
-                spi-cpol;
-                spi-cpha;
 
                 /* INT1 -> GPIO25 (header pin 22), rising edge.
                  * GPIO2/3 are reserved for I2C (compass, TF-Luna) and GPIO3
