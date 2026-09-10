@@ -395,6 +395,23 @@ Caveat: the lens is **148° diagonal**, so the image corners reach ~74° and may
 still clip the props. Expect to apply a static image mask rather than trying to
 solve it mechanically. Going further forward costs cantilever stiffness fast.
 
+**Superseded by measurement (2026-09-10).** Kalibr puts this lens at
+**H 69° / V 42° / D 83°**, not 118° / 148° (PROJECT.md, *Intrinsics: the lens
+is 69°, not 118°*). For the part as built:
+
+- **Tilt.** With ±21° vertical, 30° nose-down puts the top of the frame ~8°
+  *below* horizontal — no horizon in view, nearly all features on the ground
+  plane, the degeneracy this section chose 30° to avoid. About 15° would put
+  the horizon back at the top edge. A VIO robustness risk to watch in testing,
+  not a failure.
+- **Forward reach.** The props now sit far outside a ~35° half-FOV, so +120
+  carries more cantilever than needed, and the image-mask caveat above is
+  moot.
+
+Deferred, not urgent — the bracket works as built (Luke, 2026-09-10). The cost
+of deferring: a reprint invalidates the camera-IMU calibration (step 6) and
+any data recorded with it, so it is cheapest to decide before step 6.
+
 ---
 
 ## 8. Damping — deliberately omitted, and how to add it

@@ -2208,6 +2208,7 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 
 ## Open questions
 
+- **Bracket tilt against the measured lens.** The bracket was built for a 118° lens; the lens measures 69° H / 42° V, so the 30° nose-down tilt leaves the horizon out of frame (top edge ~8° below horizontal) and puts nearly all features on the ground plane. A ~15° reprint would restore it. Deferred, not urgent (2026-09-10); a reprint means redoing step 6. See `camera-imu-bracket-spec.md` §7.
 - Airframe condition unknown — cracked arms, damaged ESC FETs, and bent motor shafts are all live possibilities. Triage gates everything.
 - Battery capacity, connector, and health unverified (cell count confirmed 4S).
 - ~~Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder~~ — **answered 2026-09-03 by building it: yes, with 98 KB to spare.** See below. The binding constraint was never flash; it is that both features are compiled out by *source default* on a 1024 KB board.
