@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--height", type=int, default=800)
     ap.add_argument("--cam", default="cam0")
     ap.add_argument("--keep-png", action="store_true")
+    ap.add_argument("--imu-csv", help="imu0.csv from kalibr_imu_csv.py, bagged as /imu0 alongside the camera")
     ap.add_argument("--boost", type=float, default=1.0,
                     help="linear brightness gain applied after subtracting the black level "
                          "(default 1 = off). For captures too dark for Kalibr's detector: a "
@@ -129,6 +130,9 @@ def main():
         if not cv2.imwrite(os.path.join(cdir, f"{t}.png"), img):
             fail(f"could not write PNG for {t}")
 
+    if a.imu_csv:
+        shutil.copy(a.imu_csv, os.path.join(fdir, "imu0.csv"))   # bagcreater: imu*.csv -> /imu0
+
     bag = a.prefix + ".bag"
     if os.path.exists(bag):
         os.remove(bag)
@@ -153,6 +157,30 @@ def main():
         fail("first frame's pixels did not survive the round trip into the bag")
     print(f"  bag         {bag}: {len(msgs)} messages on {topic} ({m0.encoding}), "
           f"stamps and pixels round-trip exactly")
+
+    if a.imu_csv:
+        # The IMU must span the camera on the same clock. No overlap at all
+        # means the two sensors are not on one timebase -- the failure all the
+        # CLOCK_MONOTONIC work exists to prevent -- and nothing downstream
+        # would say so: Kalibr would just find no usable IMU data.
+        import csv
+        with open(a.imu_csv) as fh:
+            rows = list(csv.reader(fh))[1:]
+        c0, c1 = int(rows[0][0]), int(rows[-1][0])
+        with rosbag.Bag(bag) as b:
+            st_imu = [m.header.stamp.to_nsec() for _, m, _ in b.read_messages(topics=["/imu0"])]
+        if len(st_imu) != len(rows):
+            fail(f"bag holds {len(st_imu)} IMU messages, CSV has {len(rows)} rows")
+        if st_imu[0] != c0 or st_imu[-1] != c1:
+            fail("IMU stamps did not round-trip into the bag")
+        if c1 < ts[0] or c0 > ts[-1]:
+            fail(f"IMU {c0}..{c1} and camera {ts[0]}..{ts[-1]} do not overlap at all -- "
+                 f"the two sensors are not on the same clock")
+        lead, tail = (ts[0] - c0) / 1e9, (c1 - ts[-1]) / 1e9
+        print(f"  imu         {len(st_imu)} messages on /imu0; covers the camera from "
+              f"{lead:+.2f} s before to {tail:+.2f} s after")
+        if lead < 0 or tail < 0:
+            print("  WARNING: IMU does not cover the whole camera span -- the uncovered frames are wasted")
 
     if not a.keep_png:
         shutil.rmtree(fdir)
