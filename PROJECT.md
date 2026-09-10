@@ -19,7 +19,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, timestamp jitter 0.062 µs, clock skew 0 ppm against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment* |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
-| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
+| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). Next: print and measure the target, fetch EuRoC calibration data for validation, then intrinsics |
 | ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. Unconfigured as yet: frame class undefined, accel uncalibrated, no compass attached, radio uncalibrated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
@@ -1581,6 +1581,53 @@ causes. The thing that resolved it was a number nobody had asked for — the
 AGC's converged exposure — which happened to be visible in a log already being
 printed. Turning the log level up before forming a hypothesis would have been
 faster than either guess.
+
+### Kalibr on an arm64 VM: five failures, none of which announced itself (2026-09-10)
+
+Focus is set and threadlocked, so step 5 — Kalibr intrinsics — is next.
+`harness/kalibr_setup.sh` builds Kalibr in Docker on the sim VM: ROS 1 noetic
+inside a container, because Ubuntu 24.04 has no ROS 1. Getting a working image
+on arm64 took five fixes, and every one was a failure that either reported
+success or said nothing at all:
+
+| # | what it looked like | what it was |
+|---|---|---|
+| 1 | script died right after the sudo prompt, no message | `DF=$(ls a b c 2>/dev/null \| head -1)`: `ls` exits non-zero when any named file is missing (the repo has no plain `Dockerfile`), `pipefail` carries it out, `set -e` kills the script on the assignment. Same bug class as `build_speedybeef4v4.sh`'s feature grep. The sudo prompt was a bystander — once the docker group was active, sudo was never needed |
+| 2 | a multi-GB pull of an image this VM cannot execute | upstream `FROM osrf/ros:noetic-desktop-full` is **amd64-only**, a single-arch manifest. Docker pulls it anyway with a warning, and even `--platform linux/arm64` does not fail fast. Rebased onto the official multi-arch `ros:noetic-perception`, which carries everything Kalibr imports from ROS (`roslib`, `rosbag`, `cv_bridge`) |
+| 3 | verify passed while Kalibr could not import | upstream's **shell-form `ENTRYPOINT`** discards `docker run` arguments: told to `exit 7`, the image returned 0. And `\| head -2` on the real check reported head's exit status over a Python traceback |
+| 4 | `import cv_bridge` → `SystemError: initialization of cv_bridge_boost raised unreported exception` | a known aarch64 bug in `ros-noetic-cv-bridge` 1.16.2, present in the **pure base image** too, same package versions — so neither Kalibr nor the rebase caused it. Imports cleanly if `cv2` is imported first; fixed with a one-line `.pth` preload |
+| 5 | `rosrun: not found`, exit 127, with catkin's usage text executed as shell code | `source setup.bash` inherits the caller's positional arguments. The entrypoint sourced it while `$@` still held `rosrun kalibr ... --help`, so catkin's `_setup_util.py` got `--help`, printed its usage, and `setup.sh` eval'd that. Reproduced directly: with an argument present, sourcing prints `usage:: command not found`; with `set --` first, `rosrun` resolves |
+
+And one that was the gate's fault, not Kalibr's: `kalibr_calibrate_cameras
+--help` exits **2** by design — a bare `except:` around `parse_args()` catches
+argparse's clean `SystemExit(0)`. Its exit status gates nothing.
+
+The verify step now runs a **must-fail control first** (told to exit 7, must
+return 7) so that a zero from the real check is interpretable at all; then
+executes the tool's exact top-level imports, read out of the script inside the
+image, as a plain `python3 -c` with an honest exit status; then checks `--help`
+only for its usage banner and the absence of a traceback. Layered checks each
+caught something the others could not: the control passed straight through
+failure 5, because `bash` is on PATH with or without ROS.
+
+**Target.** Aprilgrid 6×8, 45 mm tags, spacing 0.3, page 373.7 × 490.7 mm —
+A2 with 23 / 52 mm margins. A first draft at 50 mm left **2 mm** side margins
+on A2, which invites "fit to page", which silently rescales the print: the 1 %
+focal-length trap by another route. `calibration/aprilgrid_6x8_45mm.yaml`
+holds `tagSize: MEASURE_ME` so Kalibr refuses to run until the print has been
+measured — both axes, because printers scale feed and cross directions
+differently and Kalibr assumes square tags.
+
+**Validation data.** EuRoC's calibration sequences have left
+`robotics.ethz.ch`, which now resolves but drops every packet, for the ETH
+Research Collection (doi `10.3929/ethz-b-000690084`) as a single 4.2 GB ZIP.
+Its bot protection returns 429 to scripted clients, so it comes through a
+browser. The reference answer is already on the VM, inside `V1_01_easy.zip`
+(`mav0/cam0/sensor.yaml`). Independently, this lens's physical specs predict
+the answer under an equidistant model at 640×400 binned: **fx, fy ≈ 290–315
+px, cx ≈ 320, cy ≈ 200**. A pinhole fit would land near 467, since f = 2.8 mm
+over 6 µm binned pixels — which implies only 69° HFOV against the lens's 118°,
+and is itself the confirmation that this lens has to be modelled as fisheye.
 
 ---
 
