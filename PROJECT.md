@@ -1708,6 +1708,20 @@ a properly lit room, a few hundred lux at least.
 End to end on hardware: 24 frames at 4.80 fps, absolute timestamps, pairing
 0.000 µs, bag stamps and pixels round-tripping exactly.
 
+**Measuring the print: the divisors were wrong, and a correct print exposed
+it (2026-09-10).** The Letter target (5×7, 25 mm tags) was measured at 170 mm
+across and 235 mm down. Divided as first instructed — tags plus inner gaps,
+÷6.2 and ÷8.8 — that gives 27.4 and 26.7 mm: a 2.7 % anisotropy that would
+have meant reprinting, or, fed to Kalibr, a ~10 % focal-length error. But the
+excess over the nominal grid was a constant 15 mm on both axes, which no
+printer scaling produces; it is exactly two gaps. Rasterizing the PDF showed
+why: Kalibr's grid draws a small black square, one gap wide, at every tag
+corner **including the outer perimeter**, so the outer black edge sits one gap
+beyond the outermost tags. The correct divisor is `N + 0.3·(N+1)`: 170 / 6.8 =
+**25.0 mm** and 235 / 9.4 = **25.0 mm** — the print is exact and isotropic, to
+the ~0.5 % a rule can read. Both target YAMLs now carry the corrected
+divisors; the Letter one holds the measurement.
+
 ---
 
 ## IMU bringup

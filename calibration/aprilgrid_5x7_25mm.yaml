@@ -10,20 +10,28 @@
 # this target is used closer and blurrier than the poster. Tags are 25 mm, the
 # largest a Letter page allows, to keep them detectable through that blur.
 #
-# tagSize is deliberately left unfilled. 0.025 is what was REQUESTED; what
-# matters is what the printer produced. A 99 % print puts a 1 % error straight
-# into focal length, and it will not look like an error: reprojection error
-# stays low because the model is internally consistent, just wrong. Until this
-# holds a measured number it does not parse, so Kalibr refuses to run on it.
+# tagSize is the MEASURED size, not the requested one. A 99 % print puts a 1 %
+# error straight into focal length, and it will not look like an error:
+# reprojection error stays low because the model is internally consistent,
+# just wrong. It shipped as an unparseable MEASURE_ME so that Kalibr could not
+# run until someone had put a rule on the print.
 #
-# How to measure (calipers, outer black edge to outer black edge):
-#   across the 5 columns:  tagSize = span / 6.2    (5 tags + 4 gaps of 0.3)
-#   down the 7 rows:       tagSize = span / 8.8    (7 tags + 6 gaps of 0.3)
+# How to measure (outer black edge to outer black edge of the whole pattern):
+#   across:  tagSize = span / 6.8    (5 tags + 6 gaps of 0.3)
+#   down:    tagSize = span / 9.4    (7 tags + 8 gaps of 0.3)
+# Six gaps across, not four: Kalibr's grid puts a small black square, one gap
+# wide, at every tag corner INCLUDING the outer perimeter, so the pattern's
+# outer edge sits one gap beyond the outermost tags on each side. Confirmed by
+# rasterizing this PDF: its outermost row is six 7.5 mm squares. The first
+# version of these divisors ignored them, and would have turned a perfect print
+# into 27.4 / 26.7 mm -- a ~10 % focal-length error that looked like
+# anisotropic printer scaling.
 # Do BOTH. Printers routinely scale feed and cross directions differently, and
 # Kalibr models square tags: if the two disagree by more than ~0.2 %, the print
 # is anisotropic and will bias fx against fy -- reprint rather than average.
 target_type: 'aprilgrid'
 tagCols: 5
 tagRows: 7
-tagSize: MEASURE_ME   # metres, one tag's black square edge, as printed
+tagSize: 0.025        # measured 2026-09-10: 170 mm across / 6.8 = 25.0, 235 mm down / 9.4 = 25.0.
+                      # Rule reading, ~0.5 % resolution: re-measure to the mm to tighten fx/fy.
 tagSpacing: 0.3       # gap / tag size; a ratio, so uniform print scaling cancels

@@ -9,9 +9,15 @@
 # just wrong. Until this holds a measured number it does not parse, so Kalibr
 # refuses to run on it rather than quietly using the requested size.
 #
-# How to measure (calipers, outer black edge to outer black edge):
-#   across the 6 columns:  tagSize = span / 7.5    (6 tags + 5 gaps of 0.3)
-#   down the 8 rows:       tagSize = span / 10.1   (8 tags + 7 gaps of 0.3)
+# How to measure (outer black edge to outer black edge of the whole pattern):
+#   across:  tagSize = span / 8.1    (6 tags + 7 gaps of 0.3)
+#   down:    tagSize = span / 10.7   (8 tags + 9 gaps of 0.3)
+# Seven gaps across, not five: Kalibr's grid puts a small black square, one
+# gap wide, at every tag corner INCLUDING the outer perimeter, so the pattern's
+# outer edge sits one gap beyond the outermost tags on each side. Confirmed by
+# rasterizing this PDF: its outermost row is seven 13.5 mm squares. The first
+# version of these divisors ignored them; see aprilgrid_5x7_25mm.yaml for what
+# that would have done to a correct print.
 # Do BOTH. Printers routinely scale the feed and cross directions differently,
 # and Kalibr models square tags: if the two values disagree by more than
 # ~0.2 %, the print is anisotropic and will bias fx against fy -- reprint
