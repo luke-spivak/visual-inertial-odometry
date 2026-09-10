@@ -23,9 +23,10 @@ gated -- they trade off against each other and against focal length, so
 individual coefficients can differ while the models agree closely in practice.
 
 **PRINTED TARGET SIZE IS NOT REQUESTED TARGET SIZE.** When you get to your own
-calibration: a target printed at 99 % scale puts a 1 % scale error directly
-into the focal length, and it will not look like an error -- reprojection
-error stays low because the model is internally consistent, just wrong. Print
+calibration: a target printed at 99 % scale puts a 1 % error into every metric
+distance Kalibr solves -- stereo baseline, camera-IMU lever arm -- and it will
+not look like an error. It does not reach focal length: scale the target and
+every distance together and the images are identical. Print
 the target, measure a tag with calipers across as many tags as you can span,
 divide, and put THAT number in the target YAML.
 
