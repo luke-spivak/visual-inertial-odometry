@@ -1,0 +1,18 @@
+%YAML:1.0
+# Kalibr camera-IMU result, 2026-09-10 (results/kalibr_imucam_2026-09-10-*).
+# T_imu_cam = inverse of Kalibr's T_cam_imu. Identity + 2.2 deg; IMU sits
+# ~30 mm behind the camera along the optical axis.
+cam0:
+  T_imu_cam:
+    - [ 0.999975908,  0.003754821, -0.005838197, -0.000777462]
+    - [-0.003530808,  0.999274606,  0.037918269,  0.003644543]
+    - [ 0.005976339, -0.037896742,  0.999263789,  0.030418047]
+    - [ 0.000000000,  0.000000000,  0.000000000,  1.000000000]
+  cam_overlaps: []
+  camera_model: pinhole
+  distortion_model: equidistant
+  distortion_coeffs: [-0.13882140193931888, 0.09386935808666856, -0.2575836766879479, 0.25417910356302265]
+  intrinsics: [1115.3088888227155, 1115.9573063140713, 597.9970163233057, 419.1590855596645]
+  resolution: [1280, 800]
+  rostopic: /cam0/image_raw
+  timeshift_cam_imu: 0.002183660422977532   # t_imu = t_cam + shift

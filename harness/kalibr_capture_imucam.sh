@@ -4,6 +4,10 @@
 #
 #   ssh -t viopi 'bash ~/harness/kalibr_capture_imucam.sh [seconds] [out_prefix]'
 #
+# Also records the step 7 VIO walks (camera at flight rate):
+#   ssh -t viopi 'FPS=20 bash ~/harness/kalibr_capture_imucam.sh 120 ~/vio/walk1'
+# FPS is passed through to kalibr_capture.sh; MAX_SHUTTER (us, default 1000) caps exposure.
+#
 # 1. Asks for the sudo password up front -- the IIO device is root-only -- so
 #    nothing stops to prompt once you are holding the rig.
 # 2. Lets auto-exposure look at the room for 2.5 s, then fixes exposure with
@@ -34,11 +38,11 @@ subprocess.run(["rpicam-raw", "-n", "--mode", "1280:800:8", "--width", "1280", "
 last = json.load(open("/tmp/ae.json"))[-1]
 os.remove("/tmp/ae.y16"); os.remove("/tmp/ae.json")
 P = last["ExposureTime"] * last["AnalogueGain"]
-sh = int(min(P, 1000)); g = max(1.0, P / sh)
+sh = int(min(P, int(os.environ.get('MAX_SHUTTER', 1000)))); g = max(1.0, P / sh)
 print(f"  auto-exposure: {last['ExposureTime']} us x gain {last['AnalogueGain']:.2f} at ~{last.get('Lux', 0):.0f} lux"
       f" -> fixed {sh} us, gain {g:.2f}", file=sys.stderr)
 if g > 16:
-    print(f"  FAIL: needs gain {g:.0f} at 1 ms -- too dark. Add light and rerun.", file=sys.stderr)
+    print(f"  FAIL: needs gain {g:.0f} at {sh} us -- too dark. Add light and rerun.", file=sys.stderr)
     sys.exit(1)
 print(f"{sh} {g:.2f}")
 PY
