@@ -1,0 +1,85 @@
+--- a/st_lsm6dsx_buffer.c
++++ b/st_lsm6dsx_buffer.c
+@@ -58,6 +58,9 @@
+ #include <linux/iio/buffer.h>
+ #include <linux/regmap.h>
+ #include <linux/bitfield.h>
++#include <linux/math64.h>
++#include <linux/minmax.h>
++#include <linux/time64.h>
+ 
+ #include <linux/platform_data/st_sensors_pdata.h>
+ 
+@@ -588,6 +591,63 @@
+ 					   ts + sensor->ts_ref);
+ 
+ 	return 0;
++}
++
++/*
++ * Pull ts_ref back towards the host clock as batches arrive.
++ *
++ * Sample times are ts_ref + hw_ticks * ts_gain. ts_ref is taken once, when the
++ * buffer is enabled, and ts_gain is a constant derived from the chip's
++ * FREQ_FINE trim. That is open loop: whatever ts_gain gets wrong integrates
++ * for the entire session, and the hw timestamp counter only re-anchors when it
++ * wraps, roughly every 30 hours.
++ *
++ * Measured on an ISM330DHCX: the residual after the factory trim is -2003 ppm,
++ * about 50 ns on a 25 us tick. Sample deltas stay perfectly uniform -- they are
++ * uniform by construction -- while the stream slides 1.2 s away from
++ * CLOCK_MONOTONIC over ten minutes. For fusing these samples against camera
++ * frames stamped on the same clock, that is fatal and invisible.
++ *
++ * A single-pole correction removes the ramp. It deliberately does not drive the
++ * error to zero in one step: the host reading is taken in a threaded irq
++ * handler and carries its own scheduling jitter, so slewing ts_ref by that
++ * jitter would trade a slow ramp for fast noise. What remains is a roughly
++ * constant offset of drift_per_batch * ST_LSM6DSX_TS_ANCHOR_DIV, which is
++ * precisely the quantity a VIO estimator solves for online as its
++ * camera-to-IMU time offset.
++ *
++ * The clamp bounds how far ts_ref can travel in one batch, so a transient can
++ * never reorder samples across a batch boundary.
++ */
++#define ST_LSM6DSX_TS_ANCHOR_DIV	16
++#define ST_LSM6DSX_TS_ANCHOR_MAX_NS	(1 * NSEC_PER_MSEC)
++
++static void st_lsm6dsx_reanchor_ts(struct st_lsm6dsx_hw *hw, s64 hw_ts)
++{
++	int i;
++
++	/* a batch with no timestamp tag tells us nothing about the clock */
++	if (!hw_ts)
++		return;
++
++	for (i = 0; i < ST_LSM6DSX_ID_MAX; i++) {
++		struct st_lsm6dsx_sensor *sensor;
++		s64 err, adj;
++
++		if (!hw->iio_devs[i])
++			continue;
++
++		sensor = iio_priv(hw->iio_devs[i]);
++		if (!sensor->ts_ref)
++			continue;
++
++		err = iio_get_time_ns(hw->iio_devs[i]) -
++		      (sensor->ts_ref + hw_ts);
++		adj = div_s64(err, ST_LSM6DSX_TS_ANCHOR_DIV);
++		adj = clamp_val(adj, -ST_LSM6DSX_TS_ANCHOR_MAX_NS,
++				ST_LSM6DSX_TS_ANCHOR_MAX_NS);
++		sensor->ts_ref += adj;
++	}
+ }
+ 
+ /**
+@@ -675,6 +735,8 @@
+ 		}
+ 	}
+ 
++	st_lsm6dsx_reanchor_ts(hw, ts);
++
+ 	if (unlikely(reset_ts)) {
+ 		err = st_lsm6dsx_reset_hw_ts(hw);
+ 		if (err < 0)

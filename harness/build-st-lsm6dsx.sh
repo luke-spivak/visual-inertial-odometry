@@ -31,10 +31,25 @@ cd "$WORK"
 
 # i2c and i3c glue is deliberately not built: the part is on SPI, and the i3c
 # variant would drag in CONFIG_I3C for nothing.
+# Always re-fetch, so the patch below always applies to pristine source. A
+# half-patched tree that still compiles is a worse outcome than a slow build.
 for f in st_lsm6dsx.h st_lsm6dsx_core.c st_lsm6dsx_buffer.c \
          st_lsm6dsx_shub.c st_lsm6dsx_spi.c; do
-  [ -s "$f" ] || curl -fsSL -o "$f" "$BASE/$f"
+  curl -fsSL -o "$f" "$BASE/$f"
 done
+
+# Local change: re-anchor ts_ref against the host clock as batches arrive.
+# Stock, sample times are ts_ref + ticks * ts_gain with ts_ref taken once at
+# buffer enable -- open loop, and measured here at -2003 ppm, which is 1.2 s of
+# camera-IMU divergence over a ten minute flight. See the patch header.
+PATCH="$(dirname "$(readlink -f "$0")")/st_lsm6dsx-reanchor.patch"
+if [ -f "$PATCH" ]; then
+  patch -p1 --no-backup-if-mismatch < "$PATCH" || {
+    echo "patch failed -- upstream moved under the pinned SHA?"; exit 1; }
+  echo "applied $(basename "$PATCH")"
+else
+  echo "WARNING: $PATCH not found, building stock (it will drift)"
+fi
 
 # Object layout copied from the in-tree Makefile: core, buffer and shub link
 # into one module, the bus glue is its own.
