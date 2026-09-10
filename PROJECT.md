@@ -1629,6 +1629,25 @@ px, cx ≈ 320, cy ≈ 200**. A pinhole fit would land near 467, since f = 2.8 m
 over 6 µm binned pixels — which implies only 69° HFOV against the lens's 118°,
 and is itself the confirmation that this lens has to be modelled as fisheye.
 
+**The validator had a bug of its own, found by validating it.**
+`harness/kalibr_compare.py` is the gate Kalibr has to pass on EuRoC before it
+touches the bracket, so it was run first on five inputs with known answers.
+Given a *perfect* camera-IMU result — Kalibr's `T_cam_imu` set to exactly
+`inv(T_BS)` — it reported **178.3° and 99 mm of error**, and still printed
+"proceed", because extrinsics never entered the verdict. It had been diffing
+whichever two matrices it found across opposite conventions, covering the gap
+with a note that "~180° means convention, not error". That heuristic held by
+accident: a rotation compared with its own inverse differs by twice its angle,
+so 178° is EuRoC's ~89° camera mount doubled, and a sensor mounted at 45° would
+have read 90° and looked like a genuine error.
+
+Both sides are now converted to `T_imu_cam` by key — valid because EuRoC's
+body frame is its IMU frame, which was checked (imu0's own `T_BS` is the exact
+identity) rather than assumed — the camera-to-camera `T_cn_cnm1` is no longer
+matched against camera-IMU transforms, and extrinsics are gated at 1° and
+10 mm. Re-run: the perfect result reads **0.000° / 0.00 mm**, agree; an injected
+2° / 15 mm error comes back as **exactly 2.000° / 15.00 mm**, DISAGREE, exit 2.
+
 ---
 
 ## IMU bringup

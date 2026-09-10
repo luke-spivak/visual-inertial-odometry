@@ -76,11 +76,12 @@ def _dist(cam):
 
 
 def _T(cam):
-    """Extrinsics, as a 4x4. Kalibr gives T_cam_imu as nested lists; EuRoC
-    gives T_BS as a flat `data` array with rows/cols. Different conventions
-    (T_cam_imu vs T_BS is body->sensor) -- this returns whatever is there and
-    the caller is responsible for knowing which direction it points."""
-    for k in ("T_cam_imu", "T_imu_cam", "T_BS", "T_cn_cnm1"):
+    """Camera-IMU extrinsics as a 4x4, plus the key it came from. Kalibr gives
+    T_cam_imu / T_imu_cam as nested lists; EuRoC gives T_BS as a flat `data`
+    array with rows/cols. T_cn_cnm1 is deliberately not looked up: it is a
+    camera-to-camera transform, a different quantity, and comparing it with a
+    camera-IMU transform is a category error."""
+    for k in ("T_cam_imu", "T_imu_cam", "T_BS"):
         if k in cam:
             v = cam[k]
             if isinstance(v, dict) and "data" in v:
@@ -88,6 +89,28 @@ def _T(cam):
                                                           v.get("cols", 4)), k
             return np.array(v, float), k
     return None, None
+
+
+def _imu_cam(T, key):
+    """Normalise to T_imu_cam: maps a point from the camera frame into the IMU
+    frame.
+
+      T_imu_cam  Kalibr, already this direction.
+      T_BS       EuRoC, p_B = T_BS p_S (body <- sensor). EuRoC's body frame is
+                 its IMU frame -- imu0's own T_BS is the identity -- so this is
+                 T_imu_cam too.
+      T_cam_imu  Kalibr's camchain-imucam output, IMU -> camera: the inverse.
+
+    This used to compare whichever two matrices it found and print a note that
+    "a ~180 deg answer means convention, not error". Tested against a perfect
+    result -- T_cam_imu set to exactly inv(T_BS) -- it reported 178.3 deg and
+    99 mm of error. The note's heuristic only held by accident: comparing a
+    rotation with its own inverse yields twice its angle, so 178 deg is EuRoC's
+    ~89 deg camera mount doubled. A sensor mounted at 45 deg would show 90 deg,
+    which nobody would read as a convention problem."""
+    if key == "T_cam_imu":
+        return np.linalg.inv(T), "inv(T_cam_imu)"
+    return T, key
 
 
 def rot_angle_deg(Ra, Rb):
@@ -109,6 +132,10 @@ def main():
                     help="focal length tolerance, %% (default 1.0)")
     ap.add_argument("--pp-tol", type=float, default=1.0,
                     help="principal point tolerance, %% of image width (default 1.0)")
+    ap.add_argument("--rot-tol", type=float, default=1.0,
+                    help="camera-IMU rotation tolerance, degrees (default 1.0)")
+    ap.add_argument("--trans-tol", type=float, default=10.0,
+                    help="camera-IMU translation tolerance, mm (default 10)")
     a = ap.parse_args()
 
     rn, rc = _first_cam(_strip_ros_yaml(a.result))
@@ -154,26 +181,29 @@ def main():
 
     Tr, kr = _T(rc)
     Tf, kf = _T(fc)
-    if Tr is not None and Tf is not None:
-        print(f"\n  extrinsics: {kr} vs {kf}")
-        if kr != kf:
-            print("  NOTE: different keys, so possibly inverse conventions. "
-                  "A ~180 deg or sign-flipped answer here means convention, "
-                  "not error -- check before believing it.")
+    compared_extrinsics = Tr is not None and Tf is not None
+    if compared_extrinsics:
+        Tr, lr = _imu_cam(Tr, kr)
+        Tf, lf = _imu_cam(Tf, kf)
         ang = rot_angle_deg(Tr[:3, :3], Tf[:3, :3])
-        dt = np.linalg.norm(Tr[:3, 3] - Tf[:3, 3])
-        print(f"  rotation difference     {ang:8.3f} deg")
-        print(f"  translation difference  {dt * 1000:8.2f} mm")
+        dt_mm = 1000.0 * float(np.linalg.norm(Tr[:3, 3] - Tf[:3, 3]))
+        rot_ok, tr_ok = ang <= a.rot_tol, dt_mm <= a.trans_tol
+        ok &= rot_ok and tr_ok
+        print(f"\n  extrinsics, both as T_imu_cam (camera -> IMU): {lr} vs {lf}")
+        print(f"  rotation difference     {ang:8.3f} deg  {'ok' if rot_ok else 'OUT'}")
+        print(f"  translation difference  {dt_mm:8.2f} mm   {'ok' if tr_ok else 'OUT'}")
 
+    what = "intrinsics and extrinsics" if compared_extrinsics else "intrinsics"
     print()
     if ok:
-        print("VERDICT: intrinsics agree within tolerance. Kalibr is "
+        print(f"VERDICT: {what} agree within tolerance. Kalibr is "
               "configured correctly; proceed to the real target.")
     else:
-        print("VERDICT: intrinsics DISAGREE. Do not calibrate the bracket "
+        print(f"VERDICT: {what} DISAGREE. Do not calibrate the bracket "
               "until this is understood -- the usual causes are the wrong "
-              "target YAML (tag size / spacing), the wrong camera model, or "
-              "a bag whose topics were remapped.")
+              "target YAML (tag size / spacing), the wrong camera model, "
+              "a bag whose topics were remapped, or, for extrinsics, too "
+              "little rotational excitation or a wrong IMU noise model.")
     return 0 if ok else 2
 
 
