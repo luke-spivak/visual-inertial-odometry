@@ -1623,11 +1623,15 @@ differently and Kalibr assumes square tags.
 Research Collection (doi `10.3929/ethz-b-000690084`) as a single 4.2 GB ZIP.
 Its bot protection returns 429 to scripted clients, so it comes through a
 browser. The reference answer is already on the VM, inside `V1_01_easy.zip`
-(`mav0/cam0/sensor.yaml`). Independently, this lens's physical specs predict
-the answer under an equidistant model at 640×400 binned: **fx, fy ≈ 290–315
-px, cx ≈ 320, cy ≈ 200**. A pinhole fit would land near 467, since f = 2.8 mm
-over 6 µm binned pixels — which implies only 69° HFOV against the lens's 118°,
-and is itself the confirmation that this lens has to be modelled as fisheye.
+(`mav0/cam0/sensor.yaml`). Independently, this lens's physical specs predict the answer under an
+equidistant model at **1280×800, full resolution — the mode that flies**:
+**fx, fy ≈ 585–620 px, cx ≈ 640, cy ≈ 400** (620 from the 118° horizontal
+field, 584 from the 148° diagonal; real lenses are not perfectly
+equidistant, hence a band). A pinhole fit would land near 933, since
+f = 2.8 mm over 3 µm pixels — which implies only 69° HFOV against the lens's
+118°, and is itself the confirmation that this lens has to be modelled as
+fisheye. (At 640×400 binned every pixel figure halves; that was the original
+plan, superseded 2026-09-10.)
 
 **The validator had a bug of its own, found by validating it.**
 `harness/kalibr_compare.py` is the gate Kalibr has to pass on EuRoC before it
@@ -1670,6 +1674,39 @@ comparator, and the stereo reference was derived independently from the two
 `sensor.yaml` files (`inv(T_BS_cam1) · T_BS_cam0`). Kalibr's configuration is
 now proven on a known answer; what remains unknown in step 5 is the printed
 target and our own lens. Camchain and Kalibr's summary are in `results/`.
+
+**Capturing for Kalibr: the timestamps that looked absolute were relative
+(2026-09-10).** Kalibr reads ROS 1 bags and the Pi runs no ROS, so
+`harness/kalibr_capture.sh` records through `rpicam-raw` on the Pi and
+`harness/kalibr_bag_from_raw.py` builds the bag inside the Kalibr image on the
+VM. The mode is **1280×800, full resolution** — the flight mode, decided
+2026-09-10; the build plan had said 640×400.
+
+Reading rpicam-apps' source suggested `--save-pts` writes the absolute sensor
+timestamp, offset only after a pause. It does not: the first frame after start
+is itself a `FLAG_RESTART`, so the pts file begins at `0.000`. The capture
+script checked the first timestamp against `CLOCK_MONOTONIC` rather than trust
+that reading, and failed on its first hardware run, 141.8 s adrift. Step 5
+would never have noticed; step 6's camera-IMU alignment would have been
+silently wrong; and `kalibr_bagcreater` would have choked anyway, since it
+reads all but the last nine digits of a filename as seconds and a stamp under
+1 s has none.
+
+Absolute time now comes from `--metadata` JSON, whose per-frame
+`SensorTimestamp` is `CLOCK_MONOTONIC` in ns, and the metadata records are
+proven to pair one-to-one with frames: `SensorTimestamp − first` matches every
+pts value to **0.000 µs**. Both tools refuse a count mismatch or pairing worse
+than 1 µs; the converter's synthetic cases include one record shifted by 5 ms
+and a capture with no metadata, and both are refused.
+
+**A mean of 16 is black, not dim.** `SensorBlackLevels` is 4096 in the Y16
+container — 16 in mono8 — so the first hardware capture's "mean 16.3" carried
+essentially no signal; the metadata put the scene at 1–12 lux. Both tools now
+report brightness above the black level. At 2 ms and gain 4, calibration needs
+a properly lit room, a few hundred lux at least.
+
+End to end on hardware: 24 frames at 4.80 fps, absolute timestamps, pairing
+0.000 µs, bag stamps and pixels round-tripping exactly.
 
 ---
 

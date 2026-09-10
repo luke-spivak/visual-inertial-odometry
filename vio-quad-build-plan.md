@@ -57,7 +57,7 @@ Phases 1, 2, and 3 are independent. Run them in parallel.
 
 1. `dtoverlay=ov9281` in `/boot/firmware/config.txt`. **Cam0 port only** on the Pi 5.
 2. If libcamera errors on a missing tuning file, that's the known JSON issue — get it from InnoMaker support.
-3. Confirm `libcamera-hello` streams. Set resolution to 640×400, manual exposure, fixed gain.
+3. Confirm `libcamera-hello` streams. Set resolution to **1280×800, full resolution** (decided 2026-09-10; 640×400 binned was the original plan), manual exposure, fixed gain. Calibrate and fly the same mode — intrinsics do not transfer between resolutions.
 4. Set focus: point at something 100 m+ away, maximize Laplacian variance while turning the lens. Lock with blue threadlocker.
 5. Kalibr camera intrinsics. Use a fisheye model (equidistant or double-sphere), not pinhole+radtan. Target must reach the image corners.
 6. Kalibr camera-IMU extrinsics and time offset. Build the bracket first: **one plate (printed PETG ~4 mm, 100% infill), sensors bolted back-to-back on opposite faces**, 2–3 mm standoffs, no joint anywhere between them. Damping goes between the *bracket and airframe*, never between the sensors. Strain-relieve the CSI ribbon and SPI wires to the plate. Align IMU axes to camera axes so the solved transform should read near-identity plus a known 90° — if it doesn't, something is wrong. Witness-mark the screws; calibrate the final assembly and do not disassemble it afterward.
