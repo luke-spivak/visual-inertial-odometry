@@ -48,6 +48,10 @@ def main():
     ap.add_argument("--height", type=int, default=800)
     ap.add_argument("--cam", default="cam0")
     ap.add_argument("--keep-png", action="store_true")
+    ap.add_argument("--boost", type=float, default=1.0,
+                    help="linear brightness gain applied after subtracting the black level "
+                         "(default 1 = off). For captures too dark for Kalibr's detector: a "
+                         "linear stretch moves no edge, so corner positions are preserved")
     a = ap.parse_args()
 
     y16, pts = a.prefix + ".y16", a.prefix + ".pts"
@@ -98,6 +102,10 @@ def main():
     if len(d) and (d <= 0).any():
         fail(f"{int((d <= 0).sum())} non-increasing timestamps")
     black = recs[0].get("SensorBlackLevels", [0])[0] / 256.0
+    if a.boost != 1.0:
+        mono = np.clip((mono.astype(np.float32) - black) * a.boost, 0, 255).astype(np.uint8)
+        print(f"  boost       (raw - {black:.0f}) x {a.boost:g}, clipped to 0..255")
+        black = 0.0
 
     period = float(np.median(d)) if len(d) else float("nan")
     gaps = int((d > 1.5 * period).sum()) if len(d) else 0
