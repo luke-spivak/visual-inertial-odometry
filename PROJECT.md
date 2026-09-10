@@ -17,10 +17,10 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Phase | State |
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
-| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, timestamp jitter 0.062 µs, clock skew 0 ppm against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **Phase 2 is complete except step 6** (arm64 build container on the Mac), which does not involve the Pi |
+| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, timestamp jitter 0.062 µs, clock skew 0 ppm against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment* |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
-| ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
+| ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. Unconfigured as yet: frame class undefined, accel uncalibrated, no compass attached, radio uncalibrated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
 | Evaluation | Blocked |
@@ -334,6 +334,63 @@ free. The second reason (low-altitude-only, contributes nothing at cruise) is
 untouched by this and is sufficient on its own, so the decision stands; but it
 should stand on the reason that is true.
 
+### Flashed, and two things this tree changes (2026-09-09)
+
+`vio_full` is on the board. 899,524 B used, 99,888 B free — the 09-03 numbers
+reproduced exactly, from the same tree
+(`ArduPilot-4.6.0-beta1-8209-g14f70f1028`, clean, one clone in the reflog).
+It reports itself as **ArduCopter V4.8.0-dev**: this is master, not a stable
+release, chosen because it is the tree SITL flew milestones 4-6 on. Matching the
+simulator that produced the drift numbers beats matching a release tag.
+
+Verified in the order that each step actually proves something:
+
+- **USB descriptor** reads `ArduPilot` / `speedybeef4v4` (VID 0x1209, PID
+  0x5741) — not Betaflight's. This alone proves the firmware swapped, without
+  opening a MAVLink connection.
+- **QGC**: V4.8.0-dev, ICM42688 on SPI1, SPL06 on I2C0.
+- **`VISO_TYPE` present.** The gate. Stock `speedybeef4v4` has no `VISO_`
+  parameters at all, because both features are compiled out by source default on
+  a 1024 KB board; their presence is proof that the custom build, and not a
+  stock one, is what is running.
+
+**The `.apj` could not have done this flash.** A board arriving from Betaflight
+has no ArduPilot bootloader to receive one, so the first flash must be
+`arducopter_with_bl.hex` over DFU. What worked, from the Mac:
+
+```
+dfu-util -a 0 -d 0483:df11 -s 0x08000000:mass-erase:force:leave -D arducopter_with_bl.bin
+```
+
+`mass-erase` because Betaflight's stored config sits in the flash sectors
+ArduPilot uses for parameter storage. dfu-util writes raw binaries rather than
+Intel hex, so the hex was converted with `arm-none-eabi-objcopy -I ihex -O
+binary --gap-fill 0xff` and then checked rather than assumed: bootloader
+(14,272 B) at 0x08000000 byte-identical to `speedybeef4v4_bl.bin`, application
+(899,536 B) at 0x0800C000 byte-identical to `arducopter.bin`, 34,880 B gap all
+`0xff`, total 948,688 B, sha256 `9400e328…`.
+
+**waf omits `_with_bl.hex` silently when the python `intelhex` module is
+missing.** `HAVE_INTEL_HEX` is evaluated at *configure* time; without the module
+the hex task never registers, the build still succeeds, and the one artifact
+that can flash a board coming from Betaflight simply is not produced. Nothing
+warns. That is why the 09-03 build directory held only `.apj` and `.bin`, and it
+is the same failure mode as every other entry in this file: an operation
+reported success and did less than it claimed. `build_speedybeef4v4.sh` now
+names the missing file and the reason, and no longer exits 1 on a successful
+build (its feature-check loop died on the first symbol left at its source
+default, because a failing `grep` under `set -eo pipefail` took the script with
+it — so the `<source default>` fallback it printed could never actually print).
+
+**`ARMING_CHECK` does not exist on this tree.** It is replaced by
+`ARMING_SKIPCHK`, with the sense inverted: a bitmask of checks to *skip*,
+default 0, rather than a bitmask of checks to run. **Bit 18 is VisualOdometry** —
+the check behind milestone 4's `PreArm: VisOdom: not healthy`. Any instruction
+to "set `ARMING_CHECK`" is now a no-op that writes nothing at all. QGC's
+parameter metadata still expects it and raises a dialog on connect saying so;
+the dialog is benign and names exactly this parameter. Nothing in `harness/`
+ever set it, so no sim result is affected.
+
 ### Weight and thrust budget
 
 | Component | Mass (g) |
@@ -395,14 +452,33 @@ RCx_OPTION = 80                # Viso Align — re-aligns camera yaw to AHRS pre
 **Frame conventions are the #1 integration bug.** ROS/VIO convention is ENU or FLU (REP-103); `VISION_POSITION_ESTIMATE` expects NED. This class of error is why the validation phase runs with GPS enabled.
 
 ### UART allocation (F405 V4)
-| UART | Device | Protocol | Baud |
-|---|---|---|---|
-| 2 | ELRS EP2 | CRSF | 420000 |
-| — | GPS | uBlox | 230400 |
-| — | Pi 5 | MAVLink 2 | 921600 |
-| I2C | Compass + TF-Luna | — | — |
 
-TF-Luna on I2C rather than serial specifically to free a UART. Verify exact UART numbers against the V4 pinout.
+From the board's `hwdef.dat`, not the silkscreen. `SERIALn` follows position in
+`SERIAL_ORDER`, which is why the numbering is worth reading off the source once:
+
+| `SERIALn` | Port | Pads | DMA | Board default | Assignment |
+|---|---|---|---|---|---|
+| 0 | OTG1 | USB | — | MAVLink2 | bench GCS |
+| 1 | USART1 | PA9 / PA10 | no | DJI FPV | free |
+| 2 | USART2 | PA2 / PA3 | **yes** | RCIN | **ELRS EP2, CRSF 420000** — already the default; no parameter change needed |
+| 3 | USART3 | PC10 / PC11 | no | none | GPS, uBlox |
+| 4 | UART4 | PA0 / PA1 | no | none | free |
+| 5 | UART5 | PD2, **RX only** | no | ESC telemetry 19200 | cannot carry a bidirectional link |
+| 6 | USART6 | PC6 / PC7 | **yes** | GPS | **Pi 5, MAVLink2 921600** |
+
+**Only USART2 and USART6 have DMA**, and the two highest-rate consumers are CRSF
+at 420000 and the Pi's MAVLink at 921600. CRSF has no say in the matter —
+USART2 *is* the RCIN pin pair. So the Pi takes USART6 and the GPS moves to a
+NODMA port.
+
+**This reverses the build plan's "Pi ↔ UART3".** USART3 is NODMA, and 921600 of
+vision data is the last stream on this aircraft that should be interrupt-driven
+a byte at a time. The GPS tolerates NODMA far better; if PPK raw observables
+(RXM-RAWX) end up flowing through the FC rather than being logged on the Pi,
+re-check that judgement, because it is the one thing that could make the GPS
+link the heavy one.
+
+TF-Luna on I2C rather than serial specifically to free a UART.
 
 ---
 
@@ -1837,6 +1913,52 @@ INT1 driven low by the part, and CS held high by the part's internal pull-up —
 against every other header pin floating cleanly as a control. It proved all
 seven wires and the power rail without a multimeter, and narrowed the fault to
 the controller before a single clip was touched.
+
+---
+
+## Build environment
+
+### The Mac as an arm64 build host, gated on running the binary (2026-09-09)
+
+Phase 2 step 6. `harness/buildenv/` holds a `debian:trixie` container matching
+viopi's ABI. On Apple Silicon this is **not cross-compilation** — Mac and Pi are
+both arm64, so `--platform linux/arm64` runs natively. It is a faster arm64
+machine on the desk, not an emulator, and `buildenv.sh` asserts that rather than
+assuming it (an x86 host would silently fall back to QEMU and lose ~10×).
+
+**The gate is not "the image built".** A `bookworm` container builds just as
+happily and produces binaries that fail only once they reach the Pi — possibly
+weeks later, inside something the size of OpenVINS. So `verify` compiles
+`abi_probe.cpp` in the container, runs it there, copies **that same binary** to
+the Pi, runs it there, and passes only on byte-identical output. It reads the
+Pi's glibc live over ssh rather than trusting a constant in the script.
+
+`abi_probe.cpp` is deliberately not a hello world: it exercises `std::string`
+and `std::vector` layouts, `shared_ptr`, and exception unwinding, and prints
+`glibc`, `__GLIBCXX__` and `_GLIBCXX_USE_CXX11_ABI`. A pure-libc program links
+against almost anything and proves nothing.
+
+| | container | viopi |
+|---|---|---|
+| arch | aarch64 | aarch64 |
+| glibc | 2.41 | 2.41 |
+| gcc | 14.2.0 | 14.2.0 |
+| `__GLIBCXX__` | 20250315 | 20250315 |
+| CXX11 ABI | 1 | 1 |
+
+**Second half of the check, and the one that is easy to forget:** an ABI-clean
+binary still will not start if the shared objects are absent or skewed. Both
+sides run the same Debian release, so `apt` on the Pi yields identical versions
+— but that is a claim worth checking. `verify` compares them: OpenCV
+`4.10.0+dfsg-5` is already installed on the Pi and identical, and Ceres
+`2.2.0+dfsg-4.1+b2`, glog `0.6.0-2.1+b2`, gflags `2.2.2-2+b1` are all available
+at matching versions.
+
+**The split, unchanged from the plan:** heavy third-party C++ in the container;
+anything touching libcamera, kernel headers, or IIO built on the Pi itself,
+because those bind to the running kernel and the Pi's own libraries. Re-run
+`verify` after any kernel or base-image change — it catches skew before it
+reaches something big enough to be expensive.
 
 ---
 

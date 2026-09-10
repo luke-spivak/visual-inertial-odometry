@@ -27,6 +27,10 @@
 #
 # Requires the ARM toolchain. On the sim VM it is at
 # /opt/gcc-arm-none-eabi-10-2020-q4-major and is NOT on PATH by default.
+#
+# Also requires the python intelhex module, or waf silently produces no
+# arducopter_with_bl.hex -- the only artifact that can flash a board coming from
+# Betaflight. The gate is evaluated at CONFIGURE time, so install it first.
 set -eo pipefail
 
 AP="${ARDUPILOT_DIR:-$HOME/ardupilot}"
@@ -55,8 +59,25 @@ echo "==> feature check (generated hwdef.h)"
 H="$AP/build/speedybeef4v4/hwdef.h"
 for f in HAL_VISUALODOM_ENABLED EK3_FEATURE_EXTERNAL_NAV AP_RANGEFINDER_ENABLED \
          AP_OPTICALFLOW_ENABLED EK3_FEATURE_OPTFLOW_FUSION; do
-  v="$(grep -E "^#define $f " "$H" 2>/dev/null | tail -1 | awk '{print $3}')"
+  # || true: a symbol at its source default is absent from hwdef.h, and under
+  # `set -eo pipefail` that failing grep would exit the script mid-report.
+  v="$(grep -E "^#define $f " "$H" 2>/dev/null | tail -1 | awk '{print $3}' || true)"
   printf "    %-30s %s\n" "$f" "${v:-<source default>}"
 done
 echo
-echo "==> flashable: $AP/build/speedybeef4v4/bin/arducopter.apj"
+echo "==> artifacts"
+B="$AP/build/speedybeef4v4/bin"
+printf "    %-24s %s\n" "arducopter.apj" "$([ -f "$B/arducopter.apj" ] && wc -c < "$B/arducopter.apj" || echo MISSING)"
+if [ -f "$B/arducopter_with_bl.hex" ]; then
+  printf "    %-24s %s\n" "arducopter_with_bl.hex" "$(wc -c < "$B/arducopter_with_bl.hex")"
+else
+  echo "    arducopter_with_bl.hex   MISSING -- no intelhex module at configure time."
+  echo "    waf gates hex generation on HAVE_INTEL_HEX and skips it silently."
+  echo "      pip3 install --user --break-system-packages intelhex, then re-run this."
+fi
+echo
+echo "    .apj updates a board that already runs ArduPilot (bootloader present)."
+echo "    A board arriving from Betaflight has no such bootloader: flash"
+echo "    _with_bl.hex over DFU. dfu-util needs a raw binary, so convert first:"
+echo "      arm-none-eabi-objcopy -I ihex -O binary --gap-fill 0xff \\"
+echo "        $B/arducopter_with_bl.hex arducopter_with_bl.bin"
