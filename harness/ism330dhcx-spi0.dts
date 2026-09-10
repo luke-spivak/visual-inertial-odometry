@@ -26,7 +26,34 @@
         };
     };
 
+    /* Mux GPIO25 as an input.
+     *
+     * This fragment was in the first draft, deleted on the reasoning that
+     * requesting an interrupt configures the pad anyway and that fewer
+     * fragments meant fewer failure modes. That is true on BCM283x and false
+     * on RP1: the Pi 5 left the pad at funcsel "none", the kernel registered
+     * the IRQ quite happily, and no edge ever reached the interrupt
+     * controller. The symptom was a driver that bound, enumerated, accepted a
+     * watermark and a buffer enable, answered raw register reads correctly --
+     * and delivered zero samples, with the interrupt count in /proc/interrupts
+     * pinned at 0. Deleting it did not remove a failure mode, it added one.
+     *
+     * Pull-down rather than none: INT1 is push-pull active-high, so the pull
+     * does nothing while the wire is attached, and holds the line quiet rather
+     * than floating into spurious interrupts if it ever comes off.
+     */
     fragment@1 {
+        target = <&gpio>;
+        __overlay__ {
+            ism330dhcx_int_pins: ism330dhcx_int_pins {
+                brcm,pins = <25>;
+                brcm,function = <0>;   /* input */
+                brcm,pull = <1>;       /* pull-down */
+            };
+        };
+    };
+
+    fragment@2 {
         target = <&spi0>;
         __overlay__ {
             #address-cells = <1>;
@@ -63,6 +90,8 @@
                  * doubles as the shutdown button, see PROJECT.md:185. */
                 interrupt-parent = <&gpio>;
                 interrupts = <25 1>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&ism330dhcx_int_pins>;
 
                 status = "okay";
             };

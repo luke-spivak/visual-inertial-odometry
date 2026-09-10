@@ -187,9 +187,37 @@ def teardown(devs):
             pass
 
 
-def capture(meta, out_prefix, duration_s, sample_target=None):
+def last_ts_in(data, m):
+    """Timestamp of the final complete record in a freshly read block."""
+    ts = next(c for c in m["channels"] if "timestamp" in c["name"])
+    rec, off = m["record_bytes"], ts["offset"]
+    n = len(data) // rec
+    if n == 0:
+        return None
+    fmt = ("<" if ts["endian"] == "le" else ">") + "q"
+    return struct.unpack_from(fmt, data, (n - 1) * rec + off)[0]
+
+
+def capture(meta, out_prefix, duration_s, sample_target=None, pairs=None):
     """Drain both chardevs until duration or sample target. Nothing but read and
-    write happens in here."""
+    write happens in here, except optionally recording delivery latency.
+
+    `pairs` collects (kind, host_monotonic_ns, newest_sample_ts_ns) per read.
+
+    Two different things come out of it, and they are worth keeping apart.
+
+    Delivery latency (host - ts) is how late userspace sees a sample. It is
+    dominated by the FIFO watermark and costs control-loop latency; it does NOT
+    corrupt timestamps, and it is not what calib_camimu_dt absorbs -- that is
+    the camera-to-IMU timestamp offset, a different quantity.
+
+    Clock skew is the one that bites. Regressing sample timestamps against the
+    host clock gives the ratio between the driver's reconstructed clock and
+    CLOCK_MONOTONIC. The delta histogram cannot see this at all: a driver that
+    subdivides each FIFO batch emits perfectly even deltas whether or not that
+    cadence matches real time. At 0.2% skew a ten-minute flight ends with the
+    IMU and camera over a second apart, which is exactly the unmodelable error
+    this whole timestamp architecture exists to prevent."""
     files, fds, counts = {}, {}, {}
     poller = select.poll()
     for kind, m in meta.items():
@@ -217,6 +245,11 @@ def capture(meta, out_prefix, duration_s, sample_target=None):
                 rec = meta[kind]["record_bytes"]
                 data = os.read(fd, rec * 512)
                 if data:
+                    if pairs is not None:
+                        host = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
+                        t = last_ts_in(data, meta[kind])
+                        if t:
+                            pairs.append((kind, host, t))
                     files[kind].write(data)
                     counts[kind] += len(data) // rec
 
@@ -264,6 +297,33 @@ def histogram(deltas_us, nominal_us, bins=12):
         bar = "#" * int(48 * c / peak)
         lines.append(f"  {edge:9.1f} us | {bar:<48} {c}")
     return "\n".join(lines)
+
+
+def report_skew(pairs, meta):
+    """Regress sample timestamps against CLOCK_MONOTONIC.
+
+    This is the measurement the delta histogram cannot make. Slope 1.0 means
+    the driver's reconstructed clock tracks the host; anything else is skew
+    that accumulates for the whole flight."""
+    print("--- clock skew vs CLOCK_MONOTONIC ---")
+    for kind in meta:
+        h = [p[1] for p in pairs if p[0] == kind]
+        t = [p[2] for p in pairs if p[0] == kind]
+        if len(h) < 20:
+            print(f"{kind}: only {len(h)} reads, need a longer capture")
+            continue
+        span = (h[-1] - h[0]) / 1e9
+        n = len(h)
+        hb, tb = sum(h) / n, sum(t) / n
+        num = sum((x - hb) * (y - tb) for x, y in zip(h, t))
+        den = sum((x - hb) ** 2 for x in h)
+        slope = num / den if den else float("nan")
+        ppm = (slope - 1.0) * 1e6
+        drift10 = (slope - 1.0) * 600.0
+        print(f"{kind}: over {span:.1f} s, slope={slope:.7f}  "
+              f"({ppm:+.0f} ppm)  -> {drift10*1e3:+.0f} ms adrift per 10 min")
+    print("\nUnder ~100 ppm the camera-IMU offset stays inside what")
+    print("calib_camimu_dt can hold. Much past that and it walks away.")
 
 
 def main():
@@ -322,8 +382,9 @@ def main():
     print(f"\ncapturing -> {out}_{{accel,gyro}}.bin "
           f"({'%.0f samples' % target if target else '%.2f h' % (duration/3600)})\n", flush=True)
 
+    pairs = []
     try:
-        counts, elapsed = capture(meta, out, duration, target)
+        counts, elapsed = capture(meta, out, duration, target, pairs)
     finally:
         teardown(devs.values())
 
@@ -361,6 +422,26 @@ def main():
                   f"stdev={sd:.2f} us  min={min(d):.1f}  max={max(d):.1f}  non-advancing={back}")
             print(histogram(d, nominal))
             print()
+
+        # The delta histogram above says the stream is evenly spaced. It cannot
+        # say whether those timestamps track real time, because a driver that
+        # subdivides a FIFO batch produces even deltas by construction. This
+        # does: how long after a sample was stamped did userspace see it, and
+        # how much does that vary.
+        print("--- delivery latency (sample stamp -> userspace read) ---")
+        print("Set by the FIFO watermark. Costs control-loop latency; does not")
+        print("corrupt timestamps, and is not what calib_camimu_dt absorbs.\n")
+        for kind in meta:
+            v = [(h - t) / 1e6 for k, h, t in pairs if k == kind]
+            if len(v) < 3:
+                print(f"{kind}: too few reads")
+                continue
+            mean = sum(v) / len(v)
+            sd = (sum((x - mean) ** 2 for x in v) / len(v)) ** 0.5
+            print(f"{kind}: n={len(v)}  mean={mean:.2f} ms  stdev={sd:.2f} ms  "
+                  f"spread={max(v)-min(v):.2f} ms")
+        print()
+        report_skew(pairs, meta)
 
 
 if __name__ == "__main__":
