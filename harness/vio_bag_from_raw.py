@@ -41,6 +41,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prefix"); ap.add_argument("run_dir")
     ap.add_argument("--width", type=int, default=1280); ap.add_argument("--height", type=int, default=800)
+    ap.add_argument("--trim-to-imu", action="store_true",
+                    help="drop frames outside the IMU's span instead of refusing (a run whose IMU stopped early)")
     a = ap.parse_args()
 
     per = a.width * a.height
@@ -68,8 +70,16 @@ def main():
     for name, t in (("gyro", tg), ("accel", ta)):
         if (np.diff(t) <= 0).any():
             fail(f"{name} has non-increasing timestamps")
+    fidx = np.arange(len(tc))
     if tg[0] > tc[0] or tg[-1] < tc[-1]:
-        fail(f"IMU {tg[0]}..{tg[-1]} does not cover camera {tc[0]}..{tc[-1]} -- same clock?")
+        if not a.trim_to_imu:
+            fail(f"IMU {tg[0]}..{tg[-1]} does not cover camera {tc[0]}..{tc[-1]} -- same clock? "
+                 f"(--trim-to-imu keeps only the frames the IMU covers)")
+        keep_c = (tc >= tg[0]) & (tc <= tg[-1])
+        if keep_c.sum() < 2:
+            fail("IMU and camera do not overlap -- the two sensors are not on one clock")
+        print(f"  trim    IMU ends/starts inside the camera span: keeping {int(keep_c.sum())} of {len(tc)} frames")
+        fidx, tc = fidx[keep_c], tc[keep_c]
     keep = (tg >= tc[0] - 1_000_000_000) & (tg <= tc[-1] + 1_000_000_000) & (tg >= ta[0]) & (tg <= ta[-1])
     tg, w = tg[keep], w[keep]
     acc = np.stack([np.interp(tg, ta, acc[:, k]) for k in range(3)], axis=1)
@@ -93,7 +103,7 @@ def main():
         if ii >= len(tg) or (ci < len(tc) and tc[ci] <= tg[ii]):
             m = Image(); stamp(m, tc[ci], "cam0")
             m.height, m.width, m.encoding, m.is_bigendian, m.step = a.height, a.width, "mono8", 0, a.width
-            m.data = (frames[ci] >> 8).astype(np.uint8).tobytes()
+            m.data = (frames[fidx[ci]] >> 8).astype(np.uint8).tobytes()
             wr.write("/cam0/image_raw", serialize_message(m), int(tc[ci])); ci += 1
         else:
             m = Imu(); stamp(m, tg[ii], "imu0")

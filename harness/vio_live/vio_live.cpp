@@ -117,6 +117,12 @@ struct Shared {
   std::atomic<int64_t> last_imu_ns{0};
   std::atomic<long> imu_n{0}, frames_in{0}, frames_done_n{0}, frames_dropped{0};
   std::atomic<double> upd_ms_sum{0}, upd_ms_max{0}, lag_ms_last{0};
+  // IMU-path diagnostics. Bench run 1 (2026-09-10): IMU samples stopped
+  // reaching this program 15 s in while the IMU interrupt kept firing at
+  // 440/s. These say which side went quiet: the IMU thread (heartbeat age),
+  // OpenVINS's feed (feed max), or the kernel buffer (kbuf fill).
+  std::atomic<int64_t> imu_loop_ns{0};
+  std::atomic<double> feed_ms_max{0}, read_gap_ms_max{0};
 
   std::mutex st_mtx;  // last reported state, for the stats line and summary
   bool init = false;
@@ -145,7 +151,9 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
     v << x * d.scale, y * d.scale, z * d.scale;
   };
 
+  int64_t last_data = now_ns();
   while (!g_stop) {
+    S.imu_loop_ns = now_ns();
     int r = poll(p, 2, 200);
     if (r < 0 && errno != EINTR) die(std::string("imu poll: ") + strerror(errno));
     if (r <= 0) continue;
@@ -156,6 +164,11 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
       if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
       if (n < 0) die("imu read " + d.chardev + ": " + strerror(errno));
       if (n % d.rec) die("IIO returned a partial record from " + d.chardev);
+      if (n > 0) {
+        int64_t t = now_ns();
+        if ((t - last_data) * 1e-6 > S.read_gap_ms_max) S.read_gap_ms_max = (t - last_data) * 1e-6;
+        last_data = t;
+      }
       if (d.rec_fp) fwrite(buf.data(), 1, size_t(n), d.rec_fp);
       for (ssize_t o = 0; o < n; o += d.rec) {
         int64_t t;
@@ -180,7 +193,10 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
       m.timestamp = tg * 1e-9;
       m.wm = w;
       m.am = a;
+      int64_t f0 = now_ns();
       S.sys->feed_measurement_imu(m);
+      double fm = (now_ns() - f0) * 1e-6;
+      if (fm > S.feed_ms_max) S.feed_ms_max = fm;
       S.last_imu_ns = tg;
       S.imu_n++;
     }
@@ -320,6 +336,33 @@ static void update_thread(Shared &S, FILE *out) {
   }
 }
 
+// ---------------------------------------------------------------- diagnostics
+
+static long read_long(const std::string &path) {
+  FILE *f = fopen(path.c_str(), "r");
+  if (!f) return -1;
+  long v = -1;
+  if (fscanf(f, "%ld", &v) != 1) v = -1;
+  fclose(f);
+  return v;
+}
+
+// Total st_lsm6dsx interrupts across CPUs, from /proc/interrupts.
+static long lsm_irq_count() {
+  std::ifstream f("/proc/interrupts");
+  std::string line;
+  while (std::getline(f, line)) {
+    if (line.find("lsm6dsx") == std::string::npos) continue;
+    std::istringstream ss(line);
+    std::string irq;
+    ss >> irq;
+    long sum = 0, v;
+    while (ss >> v) sum += v;  // stops at the chip name
+    return sum;
+  }
+  return -1;
+}
+
 // ---------------------------------------------------------------- main
 
 int main(int argc, char **argv) {
@@ -407,7 +450,7 @@ int main(int argc, char **argv) {
   std::thread tf(frame_thread, std::ref(S), ffd, y16, max_queue);
 
   const int64_t start = now_ns();
-  long last_imu = 0, last_in = 0, last_done = 0;
+  long last_imu = 0, last_in = 0, last_done = 0, last_irq = lsm_irq_count();
   double last_sum = 0;
   int64_t last_t = start;
   bool frames_finished = false;
@@ -428,9 +471,20 @@ int main(int argc, char **argv) {
            long(S.frames_dropped), avg, double(S.upd_ms_max), double(S.lag_ms_last), S.init ? "" : "not initialized (hold still, then move)\n");
     if (S.init)
       printf("p %+6.2f %+6.2f %+6.2f m  |v| %.2f m/s  path %.1f m\n", S.p_last(0), S.p_last(1), S.p_last(2), S.v_last.norm(), S.path_m);
+    long irq = lsm_irq_count();
+    std::string kbuf;
+    for (auto &d : devs) {
+      std::string node = d.chardev.substr(d.chardev.rfind('/') + 1);
+      kbuf += (kbuf.empty() ? "" : "/") + std::to_string(read_long("/sys/bus/iio/devices/" + node + "/buffer0/data_available"));
+    }
+    printf("           diag: irq %4.0f/s | kernel buffer %s samples | imu thread last seen %4.0f ms ago | feed max %5.2f ms | read gap max %4.0f ms\n",
+           last_irq >= 0 && irq >= 0 ? (irq - last_irq) / dt : -1.0, kbuf.c_str(),
+           (now_ns() - S.imu_loop_ns) * 1e-6, double(S.feed_ms_max), double(S.read_gap_ms_max));
     fflush(stdout);
-    last_imu = imu; last_in = in; last_done = done; last_sum = sum; last_t = t;
+    last_imu = imu; last_in = in; last_done = done; last_sum = sum; last_t = t; last_irq = irq;
     S.upd_ms_max = 0;
+    S.feed_ms_max = 0;
+    S.read_gap_ms_max = 0;
   }
 
   tf.join();

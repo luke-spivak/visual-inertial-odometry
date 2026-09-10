@@ -6,8 +6,8 @@ vio_live.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
     ssh -t viopi 'sudo python3 ~/harness/vio_live.py ~/vio/walk1 --secs 180'
 
 1. Auto-exposure probe, 2.5 s: point the camera at the scene. Shutter capped
-   at --max-shutter us (default 1000) against motion blur, gain makes up the
-   rest; refuses above gain 16, as the calibration captures did.
+   at --max-shutter us (default 4000) against motion blur, gain makes up the
+   rest; refuses above gain 16. Chosen values go to <out>.exposure.json.
 2. The IMU is set up through imu_log.setup() -- the ODR, ranges and monotonic
    clock of the calibration run -- but at FIFO watermark 8, so samples reach
    the estimator ~18 ms after they are taken rather than the ~145 ms that the
@@ -84,7 +84,12 @@ def main():
     ap.add_argument("out", help="output prefix, e.g. ~/vio/walk1")
     ap.add_argument("--secs", type=int, default=0, help="run length; 0 = until Ctrl-C")
     ap.add_argument("--fps", type=float, default=20)
-    ap.add_argument("--max-shutter", type=int, default=1000)
+    # 4 ms, not the 1 ms used for Kalibr. Bench run 1 (2026-09-10) at 1 ms in a
+    # dim room: temporal noise 9.4 DN against 3.0 DN of scene texture, FAST
+    # finding ~70k corners of pure noise, 17 % of them surviving one frame with
+    # the rig still -- no usable tracks, and the filter coasted on the IMU.
+    # Walking rotates ~30-60 dps: 2-4 px of blur at 4 ms, which KLT tolerates.
+    ap.add_argument("--max-shutter", type=int, default=4000)
     ap.add_argument("--watermark", type=int, default=8)
     ap.add_argument("--no-record", action="store_true")
     ap.add_argument("--bin", default=f"{user.pw_dir}/vio_live/vio_live")
@@ -101,6 +106,8 @@ def main():
 
     print("=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===")
     sh, g = ae_probe(a.max_shutter)
+    with open(out + ".exposure.json", "w") as f:
+        json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)
 
     devs = {}
     fdir = tempfile.mkdtemp(prefix="vio_live_")
