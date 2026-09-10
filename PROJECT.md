@@ -17,7 +17,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Phase | State |
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
-| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 blocked: driver timestamps drift -2003 ppm (1.2 s per 10 min) because `ts_ref` is anchored once and extrapolated open-loop from the chip oscillator** — see *IMU bringup*, 2026-09-09. Step 6 (arm64 container) not started |
+| Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, timestamp jitter 0.062 µs, clock skew 0 ppm against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **Phase 2 is complete except step 6** (arm64 build container on the Mac), which does not involve the Pi |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
 | Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). Next: focus (`harness/focus_check.py`), then Kalibr |
 | ArduPilot transition | **Flash question closed (2026-09-03)** — ArduCopter builds for `speedybeef4v4` with visual odom + EKF3 external nav for **+11 KB, leaving 98 KB free**; a flashable `.apj` exists. Build definition in `ardupilot/`. Not yet flashed to the board |
@@ -1604,10 +1604,41 @@ spidev logger, which looked like the crude option, is the one whose timestamps
 track real time, because it interpolates against the host clock every 250 ms
 instead of extrapolating from the sensor for the whole run.
 
-**Not yet fixed.** The options are a driver patch that re-anchors `ts_ref`
-against the host clock as it goes, or an affine correction applied in
-userspace. The residual is also temperature dependent, which a one-off
-calibration would not survive.
+**Fixed** by `harness/st_lsm6dsx-reanchor.patch`: one single-pole correction on
+`ts_ref` per FIFO batch, clamped so a transient cannot reorder samples across a
+boundary. Deliberately not a one-step correction — the host reading comes from
+a threaded irq handler and carries scheduling jitter, and slewing by that
+jitter would trade a slow ramp for fast noise, which is the worse of the two
+because no estimator state absorbs it.
+
+| | stock | patched |
+|---|---|---|
+| clock skew | **−2003 ppm** | **−0 ppm** |
+| drift per 10 min flight | 1202 ms | 0 ms |
+| implied sample rate | 440.451 Hz | **439.5694 Hz** |
+| delta stdev | 0.00 µs (synthetic) | **0.062 µs** (real) |
+| non-advancing / backwards | 2 / 0 | 0 / 0 |
+
+The patched rate agrees with the independent three-hour host-clock measurement
+(439.59 Hz) to 0.005 %. Jitter of 0.062 µs is **10× tighter than the camera's
+0.60 µs `SensorTimestamp`**, so the IMU is no longer the weak side of the time
+budget. Noise densities are unchanged — accel 4.707/4.632/5.256e-04, gyro
+1.029/0.896/0.726e-04, within 2 % of the three-hour run on every axis — which is
+what should happen, since Allan variance depends on the mean sample interval
+and nothing else about absolute time.
+
+The alternative considered and rejected was an affine correction in userspace:
+no kernel divergence, but every consumer has to apply it or silently get wrong
+time, and the residual is temperature dependent so a one-off calibration would
+degrade as the IMU warms in flight. The patch is now ours to carry across
+kernel bumps; DKMS rebuilds it, and upstream is pinned by SHA so the patch
+applying cleanly is the thing that could bite.
+
+**A caution on the result.** `slope = 1.0000000` is what a closed loop
+*produces*, not independent confirmation that it is right — the loop forces
+that number. The evidence the fix is real is elsewhere: the implied rate now
+matches an independently measured one, jitter went from impossibly clean to
+plausibly small, and monotonicity held.
 
 **Also logged.** The accelerometer emits occasional duplicate timestamps — 2 in
 130,047 — giving a zero `dt` that would divide-by-zero in a naive
