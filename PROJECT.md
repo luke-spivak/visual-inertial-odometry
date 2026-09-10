@@ -19,7 +19,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, clock skew 0 ppm (timestamp jitter was reported as 0.062 µs; that does not hold at the default watermark: 22.8 µs, see 2026-09-10 correction under the patch) against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment* |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
-| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). Next: print and measure the target, fetch EuRoC calibration data for validation, then intrinsics |
+| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). **EuRoC validation PASSED (2026-09-10)**: every intrinsic within 0.1 %, stereo baseline within 0.08 %. Next: print and measure the target, then intrinsics |
 | ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. Unconfigured as yet: frame class undefined, accel uncalibrated, no compass attached, radio uncalibrated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
@@ -1647,6 +1647,29 @@ identity) rather than assumed — the camera-to-camera `T_cn_cnm1` is no longer
 matched against camera-IMU transforms, and extrinsics are gated at 1° and
 10 mm. Re-run: the perfect result reads **0.000° / 0.00 mm**, agree; an injected
 2° / 15 mm error comes back as **exactly 2.000° / 15.00 mm**, DISAGREE, exit 2.
+
+**Kalibr validated on EuRoC `cam_april` (2026-09-10).** Same model as the
+reference (pinhole-radtan), both cameras, the 72 s bag sampled at 4 Hz (~290
+views per camera). Reprojection ±0.29 / 0.24 px on cam0, ±0.30 / 0.25 px on
+cam1. Against EuRoC's published calibration:
+
+| | Kalibr | EuRoC | difference |
+|---|---|---|---|
+| cam0 fu / fv | 458.958 / 457.615 | 458.654 / 457.296 | +0.07 % / +0.07 % |
+| cam0 cu / cv | 366.559 / 248.234 | 367.215 / 248.375 | −0.09 % / −0.02 % of W |
+| cam1 fu / fv | 457.590 / 456.167 | 457.587 / 456.134 | +0.00 % / +0.01 % |
+| cam1 cu / cv | 379.222 / 255.177 | 379.999 / 255.238 | −0.10 % / −0.01 % of W |
+| stereo baseline | 109.99 mm | 110.08 mm | −0.08 % |
+| stereo rotation | | | 0.018° |
+
+Every intrinsic sits an order of magnitude inside the 1 % gate, and the
+focal-length differences (~0.3 px) are about one of Kalibr's own reported
+standard deviations (±0.31 px) — agreement to the limit of what either
+calibration can resolve. The comparison ran through the just-fixed
+comparator, and the stereo reference was derived independently from the two
+`sensor.yaml` files (`inv(T_BS_cam1) · T_BS_cam0`). Kalibr's configuration is
+now proven on a known answer; what remains unknown in step 5 is the printed
+target and our own lens. Camchain and Kalibr's summary are in `results/`.
 
 ---
 
