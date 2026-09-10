@@ -206,6 +206,12 @@ constraint:
   only of 90° multiples — any residual beyond a degree or two means the mount or
   the convention is wrong, and that is the whole point of aligning the axes.
 
+  **Measured (2026-09-10):** Kalibr returns identity + 2.2°, not the 180°
+  about camera x predicted here — the axes the driver reports are aligned with
+  the camera's, whatever the silkscreen says. The gyro fit confirms it (see
+  PROJECT.md, *Camera-IMU extrinsics*). Use Kalibr's rotation, not this
+  convention.
+
 
 ### 4.5 Mounting to Part 2
 - 2 × Ø `3.2 + FIT_HOLE` through, at `(u,v) = (±12.0, −19.0)`

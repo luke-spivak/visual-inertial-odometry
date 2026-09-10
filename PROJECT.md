@@ -19,7 +19,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
 | Pi + IMU bench bringup | **In progress (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, clock skew 0 ppm (timestamp jitter was reported as 0.062 µs; that does not hold at the default watermark: 22.8 µs, see 2026-09-10 correction under the patch) against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment* |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
-| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). **EuRoC validation PASSED (2026-09-10)**: every intrinsic within 0.1 %, stereo baseline within 0.08 %. **Intrinsics (2026-09-10)**: fx ≈ 1116 px, field of view H 69° / V 42° / D 83° — the spec's 118° is wrong for this lens. Right quarter of the image not yet covered by the target |
+| Camera bringup | **In progress (2026-09-07)** — OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). **EuRoC validation PASSED (2026-09-10)**: every intrinsic within 0.1 %, stereo baseline within 0.08 %. **Intrinsics (2026-09-10)**: fx ≈ 1116 px, field of view H 69° / V 42° / D 83° — the spec's 118° is wrong for this lens. Right quarter of the image not yet covered by the target. **Camera-IMU (2026-09-10)**: rotation identity + 2.2°, IMU ~30 mm behind the optical centre, time offset 2.2 ms, stable across two IMU models. Next: step 7, estimator on handheld data |
 | ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. Unconfigured as yet: frame class undefined, accel uncalibrated, no compass attached, radio uncalibrated |
 | Payload integration | Printer in hand; mounts not yet designed. Blocked on Phases 1/2/4 |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
@@ -1768,6 +1768,49 @@ corners empty, so distortion there is extrapolation; the two models agree on
 it (37.0° vs 36.9° at the right edge), which is weaker evidence than data. One
 more capture reaching the right edge and the corners, in better light, would
 close it. Calibration files: `results/kalibr_cam0_2026-09-10-{equi,ds}-*`.
+
+### Camera-IMU extrinsics and time offset (2026-09-10)
+
+Phase 4 step 6. `harness/kalibr_capture_imucam.sh` records both sensors on
+`CLOCK_MONOTONIC` — the IMU through `imu_log.py` at 440 Hz, ±16 g / ±2000 dps,
+the camera at 1 ms after an auto-exposure probe — and `kalibr_imu_csv.py` with
+`kalibr_bag_from_raw.py --imu-csv` bags them for Kalibr. 60 s handheld in
+front of the wall-mounted Letter target: 288 frames, 28,987 IMU samples, gyro
+up to 248 dps, the IMU covering the camera from 2.0 s before to 4.1 s after.
+
+| | default IMU model | + accel scale & misalignment |
+|---|---|---|
+| rotation, IMU → camera | identity + **2.21°** | identity + 2.37° |
+| IMU origin in camera frame | **(0.6, -2.5, -30.5) mm** | (1.1, 0.1, -28.7) mm |
+| time offset, t_imu = t_cam + | **2.18 ms** | 2.25 ms |
+| reprojection, median | 0.40 px | 0.38 px |
+| gyro / accel, normalised median | 0.57 / 1.60 | 0.55 / 1.58 |
+
+The two models agree to 0.27°, 3.2 mm and 0.06 ms. Calibration files:
+`results/kalibr_imucam_2026-09-10-*`.
+
+**The rotation contradicts the bracket spec, and the spec is what is wrong.**
+§4.4's axis convention predicts 180° about the camera's x axis; Kalibr finds
+identity, 177.8° away, in both models. The gyro settles it: median residual
+0.006 rad/s with the rig turning at up to 248 dps, which a rotation 180° off
+could not produce — the gyro would disagree with the camera's rotation
+throughout. The spec assumed the axes printed on the board are the axes the
+driver reports, and they are not. The estimator consumes reported axes, so
+Kalibr's answer is the one to use. The 2.2° residual, almost all about the
+camera's x axis, sits at the edge of the spec's "a degree or two" and is
+consistent with lens and board tilt; it is the extrinsic, not an error.
+
+The translation puts the IMU about 30 mm behind the camera's optical centre,
+on the back face, a few mm off axis. A ~2.2 ms offset is a plausible
+exposure-plus-filter delay, and its smallness is the end-to-end confirmation
+that the two sensors share a clock.
+
+**Open, not blocking.** Accelerometer residuals run ~1.6× the noise model
+even at ×5 inflation, and modelling scale and misalignment does not change
+that, so the known 1.8 % sensitivity error is not the cause. More likely
+handheld dynamics and the capture's clipping — a third of a typical frame at
+255, the auto-exposure probe having metered darker than the scene was during
+motion. A re-capture at lower exposure would tighten it.
 
 ---
 
