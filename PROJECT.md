@@ -1612,8 +1612,7 @@ failure 5, because `bash` is on PATH with or without ROS.
 
 **Target.** Aprilgrid 6×8, 45 mm tags, spacing 0.3, page 373.7 × 490.7 mm —
 A2 with 23 / 52 mm margins. A first draft at 50 mm left **2 mm** side margins
-on A2, which invites "fit to page", which silently rescales the print: the 1 %
-focal-length trap by another route. `calibration/aprilgrid_6x8_45mm.yaml`
+on A2, which invites "fit to page", which silently rescales the print: a silent error in every metric distance Kalibr reports (not in focal length — target scale cannot reach the intrinsics). `calibration/aprilgrid_6x8_45mm.yaml`
 holds `tagSize: MEASURE_ME` so Kalibr refuses to run until the print has been
 measured — both axes, because printers scale feed and cross directions
 differently and Kalibr assumes square tags.
@@ -1696,7 +1695,8 @@ Absolute time now comes from `--metadata` JSON, whose per-frame
 `SensorTimestamp` is `CLOCK_MONOTONIC` in ns, and the metadata records are
 proven to pair one-to-one with frames: `SensorTimestamp − first` matches every
 pts value to **0.000 µs**. Both tools refuse a count mismatch or pairing worse
-than 1 µs; the converter's synthetic cases include one record shifted by 5 ms
+than 5 µs (the pts file's whole-microsecond rounding reaches 1.000 µs on real
+captures; a misaligned record is off by a whole frame, ~208 ms); the converter's synthetic cases include one record shifted by 5 ms
 and a capture with no metadata, and both are refused.
 
 **A mean of 16 is black, not dim.** `SensorBlackLevels` is 4096 in the Y16
@@ -1712,7 +1712,7 @@ End to end on hardware: 24 frames at 4.80 fps, absolute timestamps, pairing
 it (2026-09-10).** The Letter target (5×7, 25 mm tags) was measured at 170 mm
 across and 235 mm down. Divided as first instructed — tags plus inner gaps,
 ÷6.2 and ÷8.8 — that gives 27.4 and 26.7 mm: a 2.7 % anisotropy that would
-have meant reprinting, or, fed to Kalibr, a ~10 % focal-length error. But the
+have meant reprinting, or, fed to Kalibr, every metric distance ~10 % too large (focal length is immune to target scale). But the
 excess over the nominal grid was a constant 15 mm on both axes, which no
 printer scaling produces; it is exactly two gaps. Rasterizing the PDF showed
 why: Kalibr's grid draws a small black square, one gap wide, at every tag

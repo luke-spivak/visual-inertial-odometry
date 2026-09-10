@@ -89,7 +89,9 @@ def main():
              f"-- they must pair one to one")
     ts = np.array([int(r["SensorTimestamp"]) for r in recs], dtype=np.int64)
     worst_us = max(abs((t - ts[0]) / 1e6 - p) for t, p in zip(ts, rel_ms)) * 1000
-    if worst_us > 1.0:
+    # 5 us: pts carries whole microseconds (a real capture differed by exactly
+    # 1.000 us through rounding); a misaligned record is off by a whole frame.
+    if worst_us > 5.0:
         fail(f"metadata and frames disagree by up to {worst_us:.1f} us "
              f"-- the metadata is not aligned with the frames")
     d = np.diff(ts)

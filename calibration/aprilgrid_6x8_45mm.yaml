@@ -4,9 +4,10 @@
 #
 # tagSize is deliberately left unfilled. 0.045 is what was REQUESTED; what
 # matters is what the printer produced. A target printed at 99 % scale puts a
-# 1 % error straight into focal length, and it will not look like an error:
-# reprojection error stays low because the model is internally consistent,
-# just wrong. Until this holds a measured number it does not parse, so Kalibr
+# 1 % error into every metric distance Kalibr solves (stereo baseline, and in
+# step 6 the camera-IMU lever arm), and it will not look like an error. It does
+# NOT touch focal length: scale the target and every distance together and the
+# images are identical. Until this holds a measured number it does not parse, so Kalibr
 # refuses to run on it rather than quietly using the requested size.
 #
 # How to measure (outer black edge to outer black edge of the whole pattern):

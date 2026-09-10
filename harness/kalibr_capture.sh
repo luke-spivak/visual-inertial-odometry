@@ -34,7 +34,8 @@
 # so it begins at 0.000. That was misread from the source once and caught by
 # the check below on real hardware. The pts file is still written, as a cross
 # check: SensorTimestamp - first must equal every pts value, which proves the
-# metadata records pair one-to-one with frames (measured: 0.000 us over 15).
+# metadata records pair one-to-one with frames (measured: within 1.000 us
+# over 432 frames -- the pts file's whole-microsecond rounding).
 #
 # Light: SensorBlackLevels is 4096 in the 16-bit container, i.e. 16/255 in
 # mono8, so a frame whose mean is 16 is black, not dim. Brightness is reported
@@ -86,7 +87,11 @@ if not (n == len(pts) == len(recs)):
     fail(f"{n} frames, {len(pts)} pts, {len(recs)} metadata records -- they must pair one to one")
 st = [int(r["SensorTimestamp"]) for r in recs]
 worst = max(abs((s - st[0]) / 1e6 - p) for s, p in zip(st, pts)) * 1000
-if worst > 1.0:
+# 5 us, not 1: the pts file carries whole microseconds, and a real outdoor
+# capture differed from SensorTimestamp by exactly 1.000 us on some of 432
+# frames -- rounding, which a 1.0 us limit tripped on through float noise. A
+# misaligned record is off by a whole frame period, ~208 ms at 5 fps.
+if worst > 5.0:
     fail(f"metadata and frames disagree by up to {worst:.1f} us -- the metadata queue is not aligned with the frames")
 lag = (st[0] - start_ns) / 1e6
 if not (0 <= lag < 5000):

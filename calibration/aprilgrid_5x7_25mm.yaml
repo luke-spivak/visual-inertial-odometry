@@ -11,9 +11,10 @@
 # largest a Letter page allows, to keep them detectable through that blur.
 #
 # tagSize is the MEASURED size, not the requested one. A 99 % print puts a 1 %
-# error straight into focal length, and it will not look like an error:
-# reprojection error stays low because the model is internally consistent,
-# just wrong. It shipped as an unparseable MEASURE_ME so that Kalibr could not
+# error into every metric distance Kalibr solves -- a stereo baseline, and in
+# step 6 the camera-IMU lever arm -- and it will not look like an error. It
+# does NOT touch focal length: scale the target and every distance together
+# and the images are identical, so the intrinsics cannot see it. It shipped as an unparseable MEASURE_ME so that Kalibr could not
 # run until someone had put a rule on the print.
 #
 # How to measure (outer black edge to outer black edge of the whole pattern):
@@ -24,8 +25,8 @@
 # outer edge sits one gap beyond the outermost tags on each side. Confirmed by
 # rasterizing this PDF: its outermost row is six 7.5 mm squares. The first
 # version of these divisors ignored them, and would have turned a perfect print
-# into 27.4 / 26.7 mm -- a ~10 % focal-length error that looked like
-# anisotropic printer scaling.
+# into 27.4 / 26.7 mm -- every metric distance ~10 % too large, plus
+# a false 2.7 % anisotropy that looked like printer scaling.
 # Do BOTH. Printers routinely scale feed and cross directions differently, and
 # Kalibr models square tags: if the two disagree by more than ~0.2 %, the print
 # is anisotropic and will bias fx against fy -- reprint rather than average.
