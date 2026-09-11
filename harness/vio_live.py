@@ -53,6 +53,21 @@ def imu_setup(watermark, out):
     missing = {"accel", "gyro"} - set(devs)
     if missing:
         fail(f"missing IIO device(s) {sorted(missing)} -- is st_lsm6dsx loaded?")
+    # One-shot reads before any buffer is enabled. After bench run 1
+    # (2026-09-10) the sensor streamed nothing and single reads returned ~20 g
+    # at rest with the two bytes of every word equal (0x6F6F, 0xAEAE...): its
+    # SPI link or register state had gone bad while the rig was handled on
+    # dupont clips. Refuse rather than spend a run finding that out.
+    d = devs["accel"]
+    scale = float(imu_log.rd(f"{d}/in_accel_scale"))
+    raw = [int(imu_log.rd(f"{d}/in_accel_{ax}_raw")) for ax in "xyz"]
+    norm = sum((v * scale) ** 2 for v in raw) ** 0.5
+    doubled = all(((v & 0xFFFF) >> 8) == (v & 0xFF) for v in raw)
+    print(f"  imu: one-shot |accel| {norm:.2f} m/s^2")
+    if doubled or not 8.3 < norm < 11.3:
+        fail(f"IMU reads garbage (raw {raw}, |accel| {norm:.1f} m/s^2, hold the rig still)"
+             + (" -- every word has equal bytes: SPI link or register state is bad. Reseat the wires, "
+                "power-cycle the Pi (a reboot keeps 3.3 V up), retest with imu_irq_check.sh" if doubled else ""))
     meta = {k: imu_log.setup(p, 416, 16, 2000, watermark) for k, p in devs.items()}
     lines = []
     for kind, m in meta.items():
