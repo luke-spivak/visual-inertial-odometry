@@ -150,6 +150,12 @@ def main():
     except KeyboardInterrupt:
         interrupted = True   # the tty sent SIGINT to rpicam-raw and vio_live too
     finally:
+        # A second Ctrl-C used to land here and SIGKILL vio_live before it had
+        # written the recording's metadata (walk2, 2026-09-10: 362 frames, a
+        # stale 236-record meta.json, unreplayable). Shutdown takes seconds.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        if interrupted:
+            print("\n=== stopping: waiting for vio_live's summary (further Ctrl-C is ignored) ===", flush=True)
         for p, grace in ((cam, 10), (vio, 60)):
             if p is None:
                 continue

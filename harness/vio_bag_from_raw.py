@@ -17,7 +17,7 @@ Same refusals as kalibr_bag_from_raw.py: byte count must be whole 1280x800
 must equal metadata count, stamps must increase, and the IMU must cover the
 camera on the same clock.
 """
-import argparse, json, os, shutil, sys
+import argparse, json, os, re, shutil, sys
 
 import numpy as np
 import rosbag2_py
@@ -48,15 +48,28 @@ def main():
     per = a.width * a.height
     y16 = a.prefix + ".y16"
     raw = np.memmap(y16, dtype="<u2", mode="r")
-    if raw.size == 0 or raw.size % per:
-        fail(f"{y16}: not a whole number of {a.width}x{a.height} 16-bit frames -- wrong mode?")
+    # A run cut short (killed before its summary) can leave a partial last
+    # frame in the y16, whose 8 MB write buffer also lags the per-frame
+    # metadata by a few frames. Tolerate that much; anything larger is a real
+    # mismatch -- a wrong mode, or files from two different runs.
+    if raw.size < per:
+        fail(f"{y16}: not even one {a.width}x{a.height} 16-bit frame -- wrong mode?")
+    if raw.size % per:
+        print(f"  WARNING {y16} ends in a partial frame (run cut short): dropping it")
+        raw = raw[: (raw.size // per) * per]
     frames = raw.reshape(-1, a.height, a.width)
     if (frames[0] % 256).any() or (frames[-1] % 256).any():
         fail("not the R8 mode's 8-bit-in-16 layout -- refusing to guess a conversion")
-    recs = json.load(open(a.prefix + ".meta.json"))
-    if len(recs) != len(frames):
-        fail(f"{len(frames)} frames but {len(recs)} metadata records")
-    tc = np.array([int(r["SensorTimestamp"]) for r in recs], dtype=np.int64)
+    # Regex, not json.load: vio_live writes this file frame by frame, so a
+    # killed run leaves it without its closing bracket.
+    tc = np.array([int(x) for x in re.findall(r'"SensorTimestamp":\s*(\d+)', open(a.prefix + ".meta.json").read())],
+                  dtype=np.int64)
+    if len(tc) != len(frames):
+        if abs(len(tc) - len(frames)) > 8:
+            fail(f"{len(frames)} frames but {len(tc)} metadata records -- not the same run?")
+        n = min(len(tc), len(frames))
+        print(f"  WARNING {len(frames)} frames, {len(tc)} metadata records (run cut short): keeping the first {n}")
+        frames, tc = frames[:n], tc[:n]
     d = np.diff(tc)
     if (d <= 0).any():
         fail(f"{int((d <= 0).sum())} non-increasing camera timestamps")

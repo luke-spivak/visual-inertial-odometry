@@ -124,6 +124,19 @@ struct Shared {
   std::atomic<int64_t> imu_loop_ns{0};
   std::atomic<double> feed_ms_max{0}, read_gap_ms_max{0};
 
+  // OpenVINS logs why initialisation is failing only at INFO, which after
+  // initialisation is ~6 lines per frame. Run at INFO until initialised, then
+  // drop to the requested level (walk2, 2026-09-10: a stuck init with the
+  // reason invisible at WARNING).
+  std::string run_verbosity = "WARNING";
+  // OpenVINS's own initialisation (initialized_time() > 0). Distinct from
+  // initialized(), which also needs one full update: with ZUPT on, every frame
+  // at rest is a zero-velocity update that returns before the full update
+  // (VioManager.cpp:299-304, timelastupdate set only at :651), so at rest
+  // initialized() stays false however long the rig waits. walk2 (2026-09-10)
+  // sat 16 s initialised, reporting "not initialized", waiting to be lifted.
+  std::atomic<bool> vio_init{false};
+
   std::mutex st_mtx;  // last reported state, for the stats line and summary
   bool init = false;
   double init_t = 0;
@@ -231,7 +244,7 @@ static void meta_thread(Shared &S, int fd) {
   S.meta_cv.notify_all();
 }
 
-static void frame_thread(Shared &S, int fd, FILE *rec_fp, size_t max_queue) {
+static void frame_thread(Shared &S, int fd, FILE *rec_fp, FILE *meta_fp, size_t max_queue) {
   const size_t npx = size_t(S.W) * S.H;
   std::vector<uint8_t> raw(npx * 2);
   size_t idx = 0;
@@ -246,6 +259,13 @@ static void frame_thread(Shared &S, int fd, FILE *rec_fp, size_t max_queue) {
       ts = S.meta_ts[idx - 1];
     }
     if (rec_fp) fwrite(raw.data(), 1, raw.size(), rec_fp);
+    // Metadata goes out with each frame, not at exit: a run killed before its
+    // summary still leaves timestamps for every frame written (the converter
+    // reads a file missing its closing bracket).
+    if (meta_fp) {
+      fprintf(meta_fp, "%s{\"SensorTimestamp\": %lld}", idx == 1 ? "" : ",\n", (long long)ts);
+      fflush(meta_fp);
+    }
     // R8 mode: 8-bit data in the high byte of a little-endian u16. The low
     // byte must be zero; if it is not, this is a different layout and >>8
     // would silently produce a plausible wrong image. Whole first frame, then
@@ -312,6 +332,14 @@ static void update_thread(Shared &S, FILE *out) {
     S.lag_ms_last = (t1 - int64_t(c.timestamp * 1e9)) * 1e-6;
     S.frames_done_n++;
 
+    if (!S.vio_init && S.sys->initialized_time() > 0) {
+      S.vio_init = true;
+      ov_core::Printer::setPrintLevel(S.run_verbosity);
+      printf("\n  *** INITIALIZED at t=%.3f s -- holding still on zero-velocity updates; lift it and walk ***\n\n",
+             S.sys->initialized_time());
+      fflush(stdout);
+    }
+
     auto state = S.sys->get_state();
     calib_dt = state->_calib_dt_CAMtoIMU->value()(0);
     if (!S.sys->initialized()) continue;
@@ -327,7 +355,7 @@ static void update_thread(Shared &S, FILE *out) {
       S.init_t = state->_timestamp;
       S.p_first = p;
       S.p_last = p;
-      printf("\n  *** INITIALIZED at t=%.3f s -- walk now ***\n\n", state->_timestamp);
+      printf("\n  --- moving: first full update at t=%.3f s ---\n\n", state->_timestamp);
       fflush(stdout);
     }
     S.path_m += (p - S.p_last).norm();
@@ -366,7 +394,7 @@ static long lsm_irq_count() {
 // ---------------------------------------------------------------- main
 
 int main(int argc, char **argv) {
-  std::string imu_cfg, frames_fifo, meta_fifo, config, out_path, record, verbosity = "WARNING";
+  std::string imu_cfg, frames_fifo, meta_fifo, config, out_path, record, verbosity = "WARNING", init_verbosity = "INFO";
   size_t max_queue = 10;
   Shared S;
   for (int i = 1; i < argc; i++) {
@@ -379,6 +407,7 @@ int main(int argc, char **argv) {
     else if (a == "--out") out_path = next();
     else if (a == "--record") record = next();
     else if (a == "--verbosity") verbosity = next();
+    else if (a == "--init-verbosity") init_verbosity = next();
     else if (a == "--width") S.W = std::stoi(next());
     else if (a == "--height") S.H = std::stoi(next());
     else if (a == "--max-queue") max_queue = std::stoul(next());
@@ -394,7 +423,8 @@ int main(int argc, char **argv) {
 
   // OpenVINS, loaded exactly as run_subscribe_msckf does it.
   auto parser = std::make_shared<ov_core::YamlParser>(config);
-  ov_core::Printer::setPrintLevel(verbosity);
+  ov_core::Printer::setPrintLevel(init_verbosity);
+  S.run_verbosity = verbosity;
   ov_msckf::VioManagerOptions params;
   params.print_and_load(parser);
   params.use_multi_threading_subs = true;
@@ -427,11 +457,14 @@ int main(int argc, char **argv) {
   if (!out) die("cannot write " + out_path);
   fprintf(out, "# timestamp(s) q(JPL xyzw) p v bg ba -- vio_live, OpenVINS state after each processed frame\n");
 
-  FILE *y16 = nullptr;
+  FILE *y16 = nullptr, *meta_json = nullptr;
   if (!record.empty()) {
     y16 = fopen((record + ".y16").c_str(), "wb");
     if (!y16) die("cannot write " + record + ".y16");
     setvbuf(y16, nullptr, _IOFBF, 8 << 20);
+    meta_json = fopen((record + ".meta.json").c_str(), "w");
+    if (!meta_json) die("cannot write " + record + ".meta.json");
+    fprintf(meta_json, "[\n");
   }
 
   std::thread ti(imu_thread, std::ref(S), std::ref(devs));
@@ -447,7 +480,7 @@ int main(int argc, char **argv) {
   int ffd = open(frames_fifo.c_str(), O_RDONLY | O_NONBLOCK);
   if (mfd < 0 || ffd < 0) die("cannot open the camera FIFOs");
   std::thread tm(meta_thread, std::ref(S), mfd);
-  std::thread tf(frame_thread, std::ref(S), ffd, y16, max_queue);
+  std::thread tf(frame_thread, std::ref(S), ffd, y16, meta_json, max_queue);
 
   const int64_t start = now_ns();
   long last_imu = 0, last_in = 0, last_done = 0, last_irq = lsm_irq_count();
@@ -468,7 +501,8 @@ int main(int argc, char **argv) {
     std::lock_guard<std::mutex> lk(S.st_mtx);
     printf("[%6.1f s] imu %3.0f Hz | cam %4.1f in %4.1f done fps, %ld dropped | update %4.0f ms avg %4.0f max | lag %4.0f ms | %s",
            (t - start) * 1e-9, (imu - last_imu) / dt, (in - last_in) / dt, (done - last_done) / dt,
-           long(S.frames_dropped), avg, double(S.upd_ms_max), double(S.lag_ms_last), S.init ? "" : "not initialized (hold still, then move)\n");
+           long(S.frames_dropped), avg, double(S.upd_ms_max), double(S.lag_ms_last),
+           S.init ? "" : (S.vio_init ? "INITIALIZED, holding still -- lift it and walk\n" : "not initialized yet -- keep the rig still\n"));
     if (S.init)
       printf("p %+6.2f %+6.2f %+6.2f m  |v| %.2f m/s  path %.1f m\n", S.p_last(0), S.p_last(1), S.p_last(2), S.v_last.norm(), S.path_m);
     long irq = lsm_irq_count();
@@ -498,16 +532,10 @@ int main(int argc, char **argv) {
     if (d.rec_fp) fclose(d.rec_fp);
     close(d.fd);
   }
-  if (y16) {
-    fclose(y16);
-    // Metadata for exactly the frames written, in the capture script's format.
-    FILE *mj = fopen((record + ".meta.json").c_str(), "w");
-    long nf = S.frames_in;
-    fprintf(mj, "[\n");
-    for (long i = 0; i < nf; i++)
-      fprintf(mj, "{\"SensorTimestamp\": %lld}%s\n", (long long)S.meta_ts[size_t(i)], i + 1 < nf ? "," : "");
-    fprintf(mj, "]\n");
-    fclose(mj);
+  if (y16) fclose(y16);
+  if (meta_json) {
+    fprintf(meta_json, "\n]\n");
+    fclose(meta_json);
   }
 
   printf("\n=== vio_live summary ===\n");
@@ -518,8 +546,10 @@ int main(int argc, char **argv) {
     printf("  path     %.2f m since initialization\n", S.path_m);
     printf("  closure  %.3f m = %.2f %% of path (end minus first initialized position; run vio_closure.py for the at-rest average)\n",
            d.norm(), S.path_m > 0 ? 100 * d.norm() / S.path_m : 0.0);
+  } else if (S.vio_init) {
+    printf("  initialized but never moved -- ZUPT holds it at rest; lift the rig once it says INITIALIZED\n");
   } else {
-    printf("  NEVER INITIALIZED -- the rig must be still for ~2 s, then move\n");
+    printf("  NEVER INITIALIZED -- the rig must rest still for a few seconds first\n");
   }
   printf("  estimate %s\n", out_path.c_str());
   return 0;
