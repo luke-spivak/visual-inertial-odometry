@@ -6,6 +6,9 @@
 #   up_{msckf,slam}_sigma_px / chi2 back to OpenVINS defaults (1 / 1). The sim's
 #   4 / 5 were tuned to the sim renderer and the comment below says not to
 #   copy them -- 1 / 1 is the starting point, re-derive from real residuals.
+#   ZUPT actually enabled (zupt_max_disparity 1.0, zupt_only_at_beginning false):
+#   the sim's values disabled it twice over. On walk1 it took 4 replays with
+#   2 divergent to 6 with none, closure 0.72 % -> ~0.2 % (PROJECT.md, step 7).
 # Sensor files beside this one come straight from Kalibr (2026-09-10).
 
 verbosity: "INFO" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
@@ -113,12 +116,18 @@ zupt_chi2_multipler: 0
 zupt_max_velocity: 0.1
 zupt_noise_multiplier: 10
 # 0 disables the disparity override; see zupt_chi2_multipler above.
-zupt_max_disparity: 0
+# HARDWARE: ZUPT was disabled twice over by the sim values. zupt_max_disparity 0
+# together with zupt_chi2_multipler 0 rejects every attempt (UpdaterZeroVelocity.cpp:241),
+# and zupt_only_at_beginning true is dead after the first propagated frame
+# (VioManager.cpp:360 sets has_moved_since_zupt unconditionally).
+# Explanations stay on their own lines: OpenCV's YAML parser reads a colon inside a
+# trailing comment after a plain value as a new key and aborts ("Incorrect indentation").
+zupt_max_disparity: 1.0 # px, EuRoC 0.5 at 752 px doubled for 1280
 # Only on the ground. A hovering quad is near zero velocity but not actually
 # stationary, and a false zero-velocity update in flight injects a hard, wrong
 # constraint. Restricting ZUPT to before the first motion keeps the
 # initialisation benefit without that risk.
-zupt_only_at_beginning: true
+zupt_only_at_beginning: false # see the HARDWARE note above zupt_max_disparity
 
 # ==================================================================
 # ==================================================================
