@@ -1913,6 +1913,31 @@ initialised. Held in the hand, the rig never went below 15 °/s (~290 px/s at
 this focal length), and static init needs features under 20 px of disparity.
 **The rig must start resting on a surface.**
 
+**Live vs offline, same recording.** Replaying the bench 3 recording through
+the ROS node on the VM three times:
+
+| run | init (s) | closure |
+|---|---|---|
+| live, Pi | 509.88 | 3.24 % |
+| offline 1 | 509.93 | 0.91 % |
+| offline 2 | 509.88 | 2.45 % |
+| offline 3 | 509.88 | 2.63 % |
+
+Identical input spans 0.9–2.6 % offline, so the live path is not measurably
+worse. Its 3.2 % sits at the edge of that scatter, from three samples. The
+runs that initialised on the same frame cluster at 2.5–3.2 %, and the one that
+initialised a frame later got 0.9 %. The estimate is sensitive to the moment
+of initialisation. A closure figure from one run carries about ±1 point, so
+the walk is reported as the live number plus the spread of several offline
+replays. This is the same run-to-run variance PROJECT.md measured on EuRoC,
+now on hardware.
+
+The dynamic initialiser, tried offline on the first bench 3 recording (handheld
+throughout, no still start), initialised and tracked all 57 s within ~1 m of
+the start. So tracking and calibration hold without a still start. Left
+off: the table start is the reliable path, and it would be a second change
+before the walk.
+
 ---
 
 ## IMU bringup
