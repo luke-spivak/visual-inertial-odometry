@@ -294,7 +294,7 @@ Take every position below from the imported Pi 5 model, not from memory.
 - **USB-C, HDMI, USB-A, Ethernet** — no tray material within 3 mm of any
   connector opening
 - **GPIO header** — clear along its whole length. The BEC 5 V lands on pins 4
-  and 6 and the FC UART on pins 14/15, so this edge stays permanently occupied
+  and 6 and the FC UART on GPIO14/15 — **physical pins 8 (TX) and 10 (RX)**, ground on pin 14; not physical pins 14/15, which are GND and GPIO22 —, so this edge stays permanently occupied
 - **Ribbon and wiring channel** — a 10 mm-wide relief in the tray's forward edge
   at X = 0, with a zip-tie slot pair either side, so the CSI ribbon and the FC
   UART loom drop through and tie off to the tray rather than pulling on

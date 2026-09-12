@@ -212,6 +212,9 @@ constraint:
   PROJECT.md, *Camera-IMU extrinsics*). Use Kalibr's rotation, not this
   convention.
 
+  **Re-measured (2026-09-12)**, after the IMU was re-oriented: 180° about
+  camera y + 4.4° (PROJECT.md, *Camera-IMU again*).
+
 
 ### 4.5 Mounting to Part 2
 - 2 × Ø `3.2 + FIT_HOLE` through, at `(u,v) = (±12.0, −19.0)`

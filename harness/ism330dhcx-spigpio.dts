@@ -1,0 +1,82 @@
+/*
+ * ism330dhcx-spigpio.dts — the ISM330DHCX on a bit-banged (spi-gpio) bus, same
+ * pins as ism330dhcx-spi0.dts, INT1 on GPIO25. Load one of the two, not both.
+ *
+ * Why this exists (2026-09-12, on the airframe): the RP1 hardware controller
+ * got no answer from the part at any clock or mode, 1-14.3 MHz, the old 10 MHz
+ * working point included (WHO_AM_I 0x00, dmesg "unsupported whoami [00]").
+ * Driving the same pins as plain GPIOs read 0x6B, both times: the wiring and
+ * the part are fine and the controller is not. The same split as on
+ * 2026-09-09, when bit-banging worked at 25 kHz and the controller only at
+ * 10 MHz (PROJECT.md, "The bus works at 10 MHz and nowhere else").
+ *
+ * spi-gpio clocks as fast as the CPU can toggle the pads and ignores
+ * spi-max-frequency. The IMU needs about 50 kbit/s (440 Hz x 2 sensors x 7 B).
+ *
+ * Install on the Pi, in place of the spi0 overlay:
+ *   dtc -@ -I dts -O dtb -o ism330dhcx-spigpio.dtbo ism330dhcx-spigpio.dts
+ *   sudo cp ism330dhcx-spigpio.dtbo /boot/firmware/overlays/
+ *   sudo sed -i 's/^dtoverlay=ism330dhcx-spi0$/dtoverlay=ism330dhcx-spigpio/' /boot/firmware/config.txt
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2712", "brcm,bcm2711", "brcm,bcm2835";
+
+    /* Hardware SPI0 off, which releases GPIO8-11 (and its cs-gpios hold on
+     * GPIO8) to the bus below. */
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+            status = "disabled";
+        };
+    };
+
+    /* INT1 pad muxed explicitly: RP1 does not do it for an interrupt request,
+     * see ism330dhcx-spi0.dts. The SPI pins need no fragment, because gpiolib
+     * sets the RP1 pad function when spi-gpio requests them. */
+    fragment@1 {
+        target = <&gpio>;
+        __overlay__ {
+            ism330dhcx_int_pins: ism330dhcx_int_pins {
+                brcm,pins = <25>;
+                brcm,function = <0>;   /* input */
+                brcm,pull = <1>;       /* pull-down */
+            };
+        };
+    };
+
+    fragment@2 {
+        target-path = "/";
+        __overlay__ {
+            spi-gpio-imu {
+                compatible = "spi-gpio";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                sck-gpios  = <&gpio 11 0>;   /* pin 23 -> SCL */
+                mosi-gpios = <&gpio 10 0>;   /* pin 19 -> SDA */
+                miso-gpios = <&gpio 9 0>;    /* pin 21 <- DO */
+                cs-gpios   = <&gpio 8 1>;    /* pin 24 -> CS, active low */
+                num-chipselects = <1>;
+                status = "okay";
+
+                ism330dhcx@0 {
+                    compatible = "st,ism330dhcx";
+                    reg = <0>;
+                    spi-max-frequency = <1000000>;
+                    /* Mode 3, the datasheet's, and the mode of the bit-bang
+                     * that read 0x6B. */
+                    spi-cpol;
+                    spi-cpha;
+                    interrupt-parent = <&gpio>;
+                    interrupts = <25 1>;
+                    pinctrl-names = "default";
+                    pinctrl-0 = <&ism330dhcx_int_pins>;
+                    status = "okay";
+                };
+            };
+        };
+    };
+};

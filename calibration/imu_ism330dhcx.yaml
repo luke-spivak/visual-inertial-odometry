@@ -22,3 +22,5 @@ gyroscope_random_walk:       8.745e-06   # measured 1.749e-06 x5  [rad/s^2/sqrt(
 # multiple means the mount or the convention is wrong.
 # MEASURED 2026-09-10: identity + 2.2 deg, not the prediction above -- the
 # driver's reported axes are aligned with the camera. Use Kalibr's T_cam_imu.
+# RE-MEASURED 2026-09-12, IMU re-oriented: 180 deg about the camera's y axis
+# + 4.4 deg (results/kalibr_imucam_2026-09-12-*).

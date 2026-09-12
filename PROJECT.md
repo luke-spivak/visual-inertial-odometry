@@ -17,11 +17,11 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 | Phase | State |
 |---|---|
 | Airframe triage | **Complete (2026-08-27)** — flies cleanly on Betaflight 2026.6.1. Gate met: stable hover, even motor temps, failsafe verified, arm/disarm on ELRS. Residuals: one motor ticks when hand-spun (random, no play — debris; no gyro or thermal signature under load), and level trim left rough deliberately since ArduPilot redoes it |
-| Pi + IMU bench bringup | **Complete (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, clock skew 0 ppm (timestamp jitter was reported as 0.062 µs; that does not hold at the default watermark: 22.8 µs, see 2026-09-10 correction under the patch) against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment* |
+| Pi + IMU bench bringup | **Complete (2026-09-09)** — Pi 5 up (`viopi`, Pi OS 13 trixie, kernel 6.18.39+rpt-rpi-2712), SD verified genuine via f3, SPI enabled, Active Cooler fitted. **ISM330DHCX wired to SPI0 CE0 and verified end to end on raw spidev**: WHO_AM_I 0x6B, gravity 9.63 m/s², gyro 0.79 dps at rest, INT1 asserting and clearing on GPIO25, tagged FIFO draining both sensors (`harness/imu_probe.py`). **The bus works at 10 MHz and nowhere else** — see *IMU bringup*, 2026-09-09. **Overlay installed and loading**, but Pi OS builds no `st_lsm6dsx` (`# CONFIG_IIO_ST_LSM6DSX is not set`) so nothing binds — out-of-tree module build still to do. **Allan run complete (2026-09-09)**: 3 h stationary, 4.75 M samples/sensor, 0 overruns, no gaps, via `harness/imu_log_spidev.py` off the hardware FIFO, no root. Part delivers **440 Hz for a requested 416**. **Noise densities measured: accel 5.37e-04 m/s²/√Hz, gyro 1.04e-04 rad/s/√Hz** (both at or better than datasheet), bias instability 3.97e-04 / 1.77e-05. **Phase 2 steps 1-3, 5 done; step 4 partially.** Driver built out of tree and under DKMS, INT1 interrupting, monotonic clock pinned by udev. **Step 4 PASSED (2026-09-09)**: 439.57 Hz, clock skew 0 ppm (timestamp jitter was reported as 0.062 µs; that does not hold at the default watermark: 22.8 µs, see 2026-09-10 correction under the patch) against CLOCK_MONOTONIC, monotonic and gap-free — after patching `st_lsm6dsx` to re-anchor `ts_ref`, which stock drifts 1.2 s per 10 min. **PHASE 2 COMPLETE (2026-09-09).** Step 6 done: `harness/buildenv/` is a debian:trixie arm64 container matching viopi's ABI exactly (glibc 2.41, gcc 14.2.0, `__GLIBCXX__` 20250315), gated by compiling a binary in the container and executing it on the Pi — see *Build environment*. **2026-09-12: hardware SPI went quiet on the airframe; resoldered and re-verified** (see *IMU bringup*) |
 | Sim harness | **In progress** — Ubuntu 24.04 arm64 in UTM. Milestones 1–4 done. OpenVINS **validated on EuRoC V1_01_easy: ATE RMSE 0.115 m, RPE 0.72 %/10 m, scale 1.000**. On our own sim: **15.4–16.0 % drift, ATE 2.5 m over 156 m**, two flights × three replays, down from 97.8 % — see 2026-09-02. **Milestone 3's < 5 % gate is MET: drift 2.29 % median over three flights (1.91–2.89 % across eight runs), ATE 0.31–0.42 m over 155 m, 96 % coverage** — against a EuRoC reference of 0.72–0.80 % and 0.067–0.115 m. Two fixes got there: the chi-squared gate (97.8 % → 15 %) and holding heading through the corners (15 % → 2 %). Milestone 6 done (`harness/sweep.sh`). **Milestone 5 done: 3/3 GPS-denied flights complete the mission, net drift 0.38–1.73 %** (peak excursion 1.0–7.9 %, which is the real operational limit). **Phase 3 milestones 1–6 all complete** |
-| Camera bringup | **Complete (2026-09-10)** — gate met (step 7, below). Started 2026-09-07: OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). **EuRoC validation PASSED (2026-09-10)**: every intrinsic within 0.1 %, stereo baseline within 0.08 %. **Intrinsics (2026-09-10)**: fx ≈ 1116 px, field of view H 69° / V 42° / D 83° — the spec's 118° is wrong for this lens. Right quarter of the image not yet covered by the target. **Camera-IMU (2026-09-10)**: rotation identity + 2.2°, IMU ~30 mm behind the optical centre, time offset 2.2 ms, stable across two IMU models. **Step 7 prepared (2026-09-10)**: OpenVINS runs natively on the Pi (`vio_live`, no ROS), config loads the Kalibr calibration, every run records for offline replay — see *Step 7 prepared*. Bench run 1: images noise-dominated at 1 ms (cap now 4 ms); IMU stream died after 15 s: the sensor went bad on the handheld rig (one-shot reads ~20 g, doubled bytes); suspect dupont clips; power cycle + taped clips fixed it. **Bench 3: live VIO on the Pi — 0 dropped frames, 22 ms/frame, 3.25 % closure over 23.7 m** (see *Bench run 3*). **Step 7 walk (2026-09-10): 45.9 m loop, 0.72 % closure live on the Pi — gate met**, but a lift-off transient diverges 2 of 5 offline replays (ZUPT disabled by config); see *Step 7: the walk*. **ZUPT enabled: 6/6 offline replays converge, closure 0.18–0.33 %.** **Step 7 DONE (2026-09-10): walk3, ZUPT on — 0.54–0.73 % closure over 57 m across live + 4 offline replays, none diverged** (see *Step 7 result*). Remaining error is horizontal; more light first. **Phase 4 gate met.** Next: Phase 5 remainder (reconfigure, hover, autotune on the airframe) and Phase 6, now unblocked |
-| ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. Unconfigured as yet: frame class undefined, accel uncalibrated, no compass attached, radio uncalibrated |
-| Payload integration | Printer in hand; mounts not yet designed. **Unblocked (2026-09-10)**: Phases 1, 2 and 4 are complete |
+| Camera bringup | **Complete (2026-09-10)** — gate met (step 7, below). Started 2026-09-07: OV9281 enumerates on Cam0, all six modes reported, `ov9281_mono.json` tuning file ships with Pi OS and loads. Raw capture confirmed good: 640×400 R8, well-exposed, full dynamic range. **The ISP's processed RGB output is silently all-zero and must not be used** — see *Camera bringup*, 2026-09-07. 640×400 confirmed **binned, not cropped**, so full lens FOV is preserved and the bracket's §7 geometry holds. **Timestamp gate PASSED**: `SensorTimestamp` jitter 0.60 µs stdev, 82× tighter than userspace arrival, zero drops, monotonic timebase confirmed (`harness/cam_timing.py`). **Focus set and threadlocked (2026-09-10).** Kalibr image built on the sim VM and verified on arm64 after five silent failures — see *Kalibr on an arm64 VM*, 2026-09-10. Target generated (Aprilgrid 6×8, 45 mm tags, A2). **EuRoC validation PASSED (2026-09-10)**: every intrinsic within 0.1 %, stereo baseline within 0.08 %. **Intrinsics (2026-09-10)**: fx ≈ 1116 px, field of view H 69° / V 42° / D 83° — the spec's 118° is wrong for this lens. Right quarter of the image not yet covered by the target. **Camera-IMU (2026-09-10)**: rotation identity + 2.2°, IMU ~30 mm behind the optical centre, time offset 2.2 ms, stable across two IMU models. **Re-done 2026-09-12 after re-orienting the IMU: 180° about camera y + 4.4°, 0.36 px, 2.22 ms** (see *Camera-IMU again*). **Step 7 prepared (2026-09-10)**: OpenVINS runs natively on the Pi (`vio_live`, no ROS), config loads the Kalibr calibration, every run records for offline replay — see *Step 7 prepared*. Bench run 1: images noise-dominated at 1 ms (cap now 4 ms); IMU stream died after 15 s: the sensor went bad on the handheld rig (one-shot reads ~20 g, doubled bytes); suspect dupont clips; power cycle + taped clips fixed it. **Bench 3: live VIO on the Pi — 0 dropped frames, 22 ms/frame, 3.25 % closure over 23.7 m** (see *Bench run 3*). **Step 7 walk (2026-09-10): 45.9 m loop, 0.72 % closure live on the Pi — gate met**, but a lift-off transient diverges 2 of 5 offline replays (ZUPT disabled by config); see *Step 7: the walk*. **ZUPT enabled: 6/6 offline replays converge, closure 0.18–0.33 %.** **Step 7 DONE (2026-09-10): walk3, ZUPT on — 0.54–0.73 % closure over 57 m across live + 4 offline replays, none diverged** (see *Step 7 result*). Remaining error is horizontal; more light first. **Phase 4 gate met.** Next: Phase 5 remainder (reconfigure, hover, autotune on the airframe) and Phase 6, now unblocked |
+| ArduPilot transition | **Flashed and verified on the board (2026-09-09)** — `vio_full` at 899,524 B used / 99,888 B free, the 09-03 numbers reproduced exactly. DFU'd from Betaflight with `arducopter_with_bl.hex`; the `.apj` could not have done it. Board enumerates as `ArduPilot`/`speedybeef4v4`, QGC reads V4.8.0-dev, **`VISO_TYPE` present** — the gate that proves it is the custom build. **Configured, and first hover flown (2026-09-11)**: bare airframe, Stabilize, no SD card so no log. Arms, holds attitude, drifts — expected with no position source. Parameter snapshot in `params/vio_ardupilot.params`. **GPS Loiter flown and logged (2026-09-11)**: 0.36–0.93 m RMS hold, vibration ≤ 3.3 m/s², EKF innovation ratios ≤ 0.2 — see *Flight 1*. Next: Pi and camera on → VIO streaming alongside GPS → VIO hold; notch and Autotune after |
+| Payload integration | **Mounts designed and printed (2026-09-11).** Unblocked 2026-09-10: Phases 1, 2 and 4 complete |
 | Vision in the loop | **Complete in sim.** Vision reaches EKF3 with correct frames (milestone 4) and flies the full mission GPS-denied, 3/3, at 0.38–1.73 % net drift over 118–194 m on vision alone. Peak mid-flight excursion 10–13 m is the operational limit. Hardware is untouched |
 | Evaluation | Blocked |
 
@@ -38,7 +38,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 - Transmitter, LiPo charger, 2 × 4S LiPo packs (**4S confirmed**; capacity, connector, and health still unverified)
 
 ### Purchased
-- Benewake TF-Luna rangefinder
+- ~~Benewake TF-Luna rangefinder~~ — dropped 2026-09-11, see *Explicitly dropped*
 - Adafruit ISM330DHCX IMU (product 4502)
 - Smoke stopper
 - InnoMaker CAM-MIPI9281RAW-V2 camera — Amazon B09WTP5GZH. 32 × 32 mm, 28 × 28 M2 holes, f = 2.8 mm, 148°D/118°H **confirmed** from manual V1.4
@@ -46,7 +46,7 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 - Matek 12S Pro BEC — **meter the output rail at 5 V before it touches the Pi**
 - Bambu Lab A1 mini 3D printer (base, no AMS) — textured PEI plate, no glue stick needed for PETG
 - Filament: **ELEGOO PETG 1.75 mm 1 kg black, B0D41Y3WWZ** (standard, not Rapid — slower printing gives better layer adhesion, and speed is not a constraint on 20–60 min parts). Set "Generic PETG" in Bambu Studio; let the A1 mini run flow calibration. No PLA — 60 °C Tg creeps under load in sun. Store sealed with desiccant between sessions. Inspect black parts for stress cracks with a raking flashlight, not head-on
-- SEQURE M10-25Q GPS/compass — u-blox M10 (UBX), QMC5883L, 12.2 g. **Set `GPS_TYPE=2`, not Auto** — Auto can fall back to NMEA and silently drop 3D Doppler velocity, which is the VIO scale-error check
+- SEQURE M10-25Q GPS/compass — u-blox M10 (UBX), **QMC5883P** (not the L the listing implied: ArduPilot detects a QMC5883P on I2C0, 2026-09-11, and the flashed build has its driver), 12.2 g. **Set `GPS1_TYPE=2`, not Auto** (`GPS1_TYPE` on the flashed 4.8-dev tree; `GPS_TYPE` does not exist there) — Auto can fall back to NMEA and silently drop 3D Doppler velocity, which is the VIO scale-error check
 
 ### Ordered (PiShop, $140.85)
 - Raspberry Pi 5 4GB + Active Cooler + official 27 W USB-C PSU — $132.90
@@ -58,11 +58,12 @@ Phase 3 milestones 1–6 are complete. **This is not the deliverable.** The deli
 ### Still to buy
 | Item | Part | Price | Source |
 |---|---|---|---|
-| FC blackbox card | Any **≤32 GB SDHC**, FAT32 (overwrite format). Commodity part — cap spend ~$10; 32 GB is a dead capacity and often overpriced. Betaflight addresses only ~4 GB; ArduPilot uses all | ≤$10 | anywhere |
+| FC blackbox card | Any **≤32 GB SDHC**, FAT32 (overwrite format). Commodity part — cap spend ~$10; 32 GB is a dead capacity and often overpriced. Betaflight addresses only ~4 GB; ArduPilot uses all. **Not owned — needed.** The 09-10 boot message `Failed to create log directory /APM/LOGS : ENOSPC` was read here as "card present and full"; that was wrong. In `AP_Filesystem_FATFS.cpp` a full or denied volume maps to `EACCES`; `ENOSPC` comes only from `FR_NOT_ENABLED` (no volume mounted) — the no-card case. Without it there is no FC log: no notch, no tune verification, no dataflash evidence for Phase 7 | ≤$10 | anywhere |
 | Incidentals | 20 AWG silicone wire, blue threadlocker, momentary pushbutton (GPIO shutdown), silicone damping balls. XT60 pigtail optional — bench-testing the BEC only, not needed in the flight build | ~$20 | — |
 | Later | ArduSimple simpleRTK2B + multiband antenna | ~$271 | ardusimple.com |
 
 ### Explicitly dropped
+- **Benewake TF-Luna rangefinder** (2026-09-11, Luke's call). Two arguments in this file leaned on it: *Why not an integrated-IMU camera* ("TF-Luna already anchors metric scale") and the low-altitude health check in the "rangefinder cannot rescue this" note. Without it, the GPS's 3D Doppler velocity is the scale check, and the altitude health check is gone.
 - **Matek 3901-L0X optical flow** — needs four separate features re-enabled in the 1 MB firmware build (`AP_OPTICALFLOW_ENABLED`, `HAL_MSP_OPTICALFLOW_ENABLED`, `EK3_FEATURE_OPTFLOW_FUSION`, `MODE_FLOWHOLD_ENABLED`), all competing for flash needed by external nav. Also low-altitude-only, so contributes nothing at cruise.
 
 ---
@@ -186,6 +187,8 @@ Feed via GPIO 5V/GND, which bypasses USB-C PD negotiation, so set `usb_max_curre
 3. **RC-switch shutdown over the existing MAVLink link** — the bridge node already parses FC telemetry; have it watch a spare aux channel in `RC_CHANNELS` and call `shutdown -h now` when flipped **while disarmed**. No extra hardware, works from the transmitter.
 
 Keep the recording partition separate from root regardless, so a bad unplug costs one flight's data instead of the OS.
+
+**Seen for real (2026-09-12), with none of the three in place.** The pack came out shortly after NetworkManager rewrote its saved connections: both `/etc/netplan/90-NM-*.yaml` were 0 bytes on the next boot, so the Pi came up with no Wi-Fi profile and was reachable only over Ethernet. Re-creating the profile fixed it. What broke was a config file mid-write, not a capture — the case the overlay exists for. Until it is on: `sudo poweroff`, or the button, and wait for the red LED before pulling the pack.
 
 *Rejected: supercap or UPS hold-up power.* Covering an 8 s shutdown at ~15 W needs ~120 J; a 5 F bank at 5 V yields ~10 J before dropping under the Pi's brownout threshold, so you'd need a boost stage and a far bigger bank. UPS HATs with 18650s run 50–80 g against a 140 g payload budget. Overlayfs is free.
 
@@ -410,10 +413,139 @@ no GyroFFT (`!HAL_GYROFFT_ENABLED`, from `extract_features.py` on the flashed
 ELF), so the harmonic notch is throttle-based, not FFT-tracked. Generate the
 metadata and check a name before trusting any guide.
 
-**No compass does not block arming.** `arm_checks()` skips its compass-health
-check when `using_noncompass_for_yaw()` is true, and with no compass fitted EKF3
-fuses a static yaw on the ground (`AP_NavEKF3_MagFusion.cpp:372`), which makes it
-true. Read from source, not yet seen on the bench.
+QGC's bundled metadata is stale in the same way. It still offers `RCx_OPTION` 41
+as "ArmDisarm (4.1 and lower)"; in this tree 41 is `ARMDISARM_UNUSED`, and a
+switch set to it does nothing. Arm/disarm is **153**.
+
+**Correction (2026-09-10, same day): no compass *does* block arming.** Read
+from source as passing; the bench then showed `PreArm: Compass 1 not healthy`
+and `Arm: Compass 1 not healthy` with nothing fitted. The mistake was reading
+`Compass::use_for_yaw(0)` as "a compass exists" — it returns the `COMPASS_USE`
+*setting*, default 1, so both checks run and fail. The pre-arm check's own
+comment names the fix: with `COMPASS_USE = 0` it returns early ("compass use is
+disabled"). Set it back to 1 when the M10 is fitted, or the compass is ignored.
+
+### The hardware ExternalNav link: `vio_mavlink.py` (2026-09-11)
+
+The Pi runs VIO without ROS, so `ros2/vio_bridge` cannot be the link on hardware.
+`harness/vio_mavlink.py` follows the estimate file `vio_live` writes and sends
+`VISION_POSITION_ESTIMATE` over UART3 (`/dev/ttyAMA0`, 230400). Tested before it
+touched hardware: the frame maths round-trips (`harness/test_vio_mavlink.py`),
+and 80 of 80 messages went through the real script over UDP and decoded as
+MAVLink 2 with the expected attitude, position axes and reset counter.
+
+Three things it has to do that the sim bridge did not:
+
+- **Undo the camera tilt.** The IMU's axes are the camera's turned 180° about
+  image-down, x and z reversed (Kalibr 2026-09-12: 180° about camera y + 4.4°;
+  identity + 2.2° before the IMU was re-oriented), and the camera looks 30° nose-down; `VISO_ORIENT` only does 90°
+  steps. The sender applies body ← camera ← IMU from Kalibr's rotation and
+  `--tilt-deg`.
+- **Get each pose promptly.** `vio_live` wrote its estimate file unflushed, so a
+  follower got poses in 4 KB bursts, over a second late. It now flushes per line.
+- **Measure its own lag.** Pose stamps and `time.monotonic()` are both
+  `CLOCK_MONOTONIC` on the Pi. Poses older than 0.5 s are dropped, and the
+  printed median lag is what `VISO_DELAY_MS` should be set to.
+
+**Mounting check before any VIO flight.** Level and still on the airframe, the
+Pi IMU must read ≈ **(+0.09, −8.83, +4.26) m/s²** for the 30° bracket, or
+(+0.13, −9.63, +1.83) for a 15° reprint (`vio_mavlink.py --expect-accel`, 2026-09-12 calibration). A positive
+y means the image is upside down, which this camera's is when the module is
+upright (see below): run with `--upside-down`, expecting ≈ (−0.18, +8.10, +5.52). Then by hand: nose down → the
+printed pitch goes negative; right side down → roll positive; yaw clockwise
+from above → yaw grows.
+
+**Parameters**, carried from milestones 4–5: `VISO_TYPE` 2 (Viso Align works
+only in that backend), `VISO_DELAY_MS` from the printed lag, `VISO_POS_M_NSE`
+0.3, `VISO_POS_X/Y/Z` 0.09 / 0 / −0.03 (the IMU sits ~30 mm behind the lens on
+the 30° bracket — from `CAM_Y`, `CAM_Z` and Kalibr). `EK3_SRC2_*` and
+`EK3_SRC3_*` are both configured the same way: ExternalNav horizontal, baro vertical (the sim
+crash), compass yaw, no velocity. That way a 2- or 3-position switch on aux 90
+lands on VIO in either non-low position and never on an empty source set.
+`EK3_SRC_OPTIONS` is 0, so the GPS is not fused while on those sets: a hold
+there is a real VIO hold, with GPS one switch-flip away.
+
+**Two things the first bench run found (2026-09-11).**
+
+- **A still rig sends nothing.** `vio_live` prints INITIALIZED when OpenVINS
+  reports a start time, but writes a pose only when `initialized()` is true, and
+  that needs `timelastupdate != -1`. Zero-velocity updates at rest return before
+  it is ever set (`VioManager.cpp:226–231`; it is set only at line 651). So an
+  aircraft sitting still after power-up emits no poses, and ArduPilot reports
+  `VisOdom: not healthy`. Move it once after INITIALIZED (the hand-rotation
+  check does this) and poses flow from then on, even when it is set back down,
+  because `timelastupdate` is never reset.
+- **The camera's image is rotated 180° from the module.** Propped roughly
+  upright with the lens near level, the Pi IMU read (+0.60, +9.52, −0.43) m/s² (IMU in its 09-10 orientation),
+  +g on the image-down axis. A recorded frame shows why: the scene is upside
+  down, with the floor at the top of the frame (`bench1.y16`, frame 20). The
+  sensor reads out inverted relative to its board, which is what
+  `cam_stream.py --rot180` was for. OpenVINS and Kalibr work in the image frame
+  and are unaffected; only the mount mapping changes. **On the airframe, with the
+  module mounted upright, run `vio_mavlink.py --upside-down`**, and expect the
+  level-and-still reading to be the upside-down row of `--expect-accel`,
+  ≈ (−0.18, +8.10, +5.52) m/s² (2026-09-12 calibration). The two orientations differ in z as well as in
+  the sign of y, because Kalibr's 4.4° residual does not flip with the camera.
+
+### RAM is the F405's other limit (2026-09-11)
+
+Flash turned out ample; RAM does not. The first compass calibration on the
+airframe failed with `CompassCalibrator: Cannot start compass thread`. The FC's
+own `MEMINFO` said why: **2,808 bytes free**, against a calibration thread that
+asks for a 2,048-byte stack plus its working area
+(`AP_Compass_Calibration.cpp:126`). Boot starts with ~41 KB free; the batch
+sampler for the notch takes 6,144 B (`INS: alloc 6144 bytes for ISB`), and the
+SD card, now mounted, adds a 16 KB logging buffer — the smallest tier, which
+this board class gets (`AP_Logger.cpp`, `HAL_LOGGING_FILE_BUFSIZE`).
+
+Two features this aircraft will never use each start a thread from the same
+pool: the OSD (`OSD_TYPE`, a 1,280-byte stack, `AP_OSD.cpp:317`) and the DJI
+port on SERIAL1 (MSP, `AP_MSP.cpp:116`). Both go: `OSD_TYPE` 0,
+`SERIAL1_PROTOCOL` −1. The batch sampler is needed for one flight — the notch
+data — and is off otherwise.
+
+This matters beyond the compass: the Pi link adds a MAVLink channel on SERIAL3,
+allocated from the same pool at boot. Check `MEMINFO` free RAM after enabling
+it, before trusting it.
+
+### Flight 1: GPS Loiter on ArduPilot (2026-09-11)
+
+Airframe plus GPS mast, no Pi or camera; halved rate gains, no notch. Log:
+`log_0_2026-9-11-19-20-10.bin` (QGC `Logs/`). Loiter airborne 118 s:
+
+| | Loiter |
+|---|---|
+| hold, sticks centred | RMS 0.76 / 0.36 / 0.93 m by thirds, worst 1.53 m — no spiral |
+| vibration | median ≤ 1.7, max 3.3 m/s², 0 clipping events |
+| attitude error | median 0.32°, 95th percentile 0.92° |
+| GPS | 15–24 satellites, HDOP 0.60–0.92 |
+| EKF innovation ratios | velocity 0.20, position 0.06, height 0.04, mag 0.03 |
+| compass | field 0.7 % from its disarmed value in flight — the tail mast keeps it clear of current |
+| motors | rear pair ~8 % more output than front (1398 vs 1368 µs): CG aft; the nose camera will offset it |
+| free RAM | 14,728 B (batch sampler off; OSD and DJI port off) |
+| hover | ~6.5 A at 15.4 V; `MOT_THST_HOVER` learned 0.165 |
+
+The two logged errors are Loiter refusing at 68 s and 114 s, before the EKF was
+using GPS (135 s into the log, after a cold start and one EKF reset on the
+ground). Wait for `EKF3 IMU0 is using GPS` before a Loiter flight. No notch data:
+`INS_LOG_BAT_MASK` was still 0.
+
+### Flight 2: the notch data (2026-09-11)
+
+Same airframe, `INS_LOG_BAT_MASK` 1, `INS_LOG_BAT_OPT` 4; log
+`log_1_2026-9-11-19-29-12.bin`. The gyro batch sampler ran at **1009 Hz**, so
+nothing below ~500 Hz aliases. Over 24 batches at steady hover throttle (median
+0.169), the roll/pitch spectrum shows one motor cluster at **157, 164 and
+172 Hz**: the four motors at slightly different speeds, the rear pair fastest,
+matching Flight 1's aft CG. 164 Hz is ~9,800 rpm, in line with the thrust-budget
+estimate. Notch: `INS_HNTCH_ENABLE` 1 (reboot), `INS_HNTCH_MODE` 1 (throttle —
+no GyroFFT in this binary and no RPM telemetry), `FREQ` 164, `BW` 82, `REF`
+0.17 (`MOT_THST_HOVER`), `HMNCS` 3.
+
+The sticks were not what made it feel twitchy. Roll, pitch and yaw rested within
+±3 µs of trim, inside their 20 µs deadzones 98–100 % of the time, and with the
+sticks at rest Loiter held at a median 0.05 m/s. The sensitivity is the response
+per unit of stick: `LOIT_SPEED_MS` 12.5 m/s at full deflection, and no expo.
 
 ### Weight and thrust budget
 
@@ -485,10 +617,10 @@ From the board's `hwdef.dat`, not the silkscreen. `SERIALn` follows position in
 | 0 | OTG1 | USB | — | MAVLink2 | bench GCS |
 | 1 | USART1 | PA9 / PA10 | no | DJI FPV | free |
 | 2 | USART2 | PA2 / PA3 | **yes** | RCIN | **ELRS EP2, CRSF 420000** — already the default; no parameter change needed |
-| 3 | USART3 | PC10 / PC11 | no | none | GPS, uBlox |
+| 3 | USART3 | PC10 / PC11 | no | none | **Pi 5, MAVLink2 230400** — silkscreen R3/T3, nose edge (from 2026-09-11) |
 | 4 | UART4 | PA0 / PA1 | no | none | **not usable** — wired to the onboard Bluetooth module (board README); my 09-09 table called it free |
 | 5 | UART5 | PD2, **RX only** | no | ESC telemetry 19200 | cannot carry a bidirectional link |
-| 6 | USART6 | PC6 / PC7 | **yes** | GPS | **Pi 5, MAVLink2 921600** |
+| 6 | USART6 | PC6 / PC7 | **yes** | GPS | **GPS, uBlox** — the silkscreened GPS&Compass cluster (4V5 G T6 R6 SDA SCL), tail edge (from 2026-09-11) |
 
 **Only USART2 and USART6 have DMA**, and the two highest-rate consumers are CRSF
 at 420000 and the Pi's MAVLink at 921600. CRSF has no say in the matter —
@@ -508,10 +640,18 @@ DMA-enabled and gives battery defaults `BATT_VOLT_MULT 11.2`, `BATT_AMP_PERVLT
 and 25.0. What runs is the hwdef. Calibrate the battery monitor against a meter
 either way, and treat the README as prose, not as the board's definition.
 
-So the free full-duplex ports are USART1 and USART3, both NODMA, plus USART6 —
-which the Pi takes.
+**Revised 2026-09-11: the GPS takes UART6 and the Pi goes back to UART3** — the
+build plan's original assignment. The GPS lead is the module's stock SH1.0 cable
+down a tail mast, and it reaches only the board's GPS&Compass cluster (4V5, G,
+T6, R6, SDA, SCL) on the tail edge; R3/T3 are on the nose edge. The 09-09
+argument above was framed in baud, but the cost of a NODMA port scales with
+bytes per second, and the Pi's traffic is small: a `VISION_POSITION_ESTIMATE` is
+~130 bytes, ~4 KB/s at 30 Hz, plus whatever telemetry the bridge requests — keep
+the FC→Pi stream rates to what it uses. Run it at **230400, not the build plan's 921600**: the F405's USART has no FIFO, so without DMA each byte must be read before the next one lands — ~11 µs at 921600, ~43 µs at 230400 — and the traffic fits the slower rate with room to spare. Side effect: RXM-RAWX through the FC, if
+ever wanted, now rides a DMA port. USART1 stays spare (its DJI connector carries
+9 V and the receiver's SBUS/R2 line on two of its pins — leave those unconnected).
 
-TF-Luna on I2C rather than serial specifically to free a UART.
+~~TF-Luna on I2C rather than serial specifically to free a UART.~~ Dropped 2026-09-11; the I2C bus now carries only the compass.
 
 ---
 
@@ -1845,6 +1985,41 @@ handheld dynamics and the capture's clipping — a third of a typical frame at
 255, the auto-exposure probe having metered darker than the scene was during
 motion. A re-capture at lower exposure would tighten it.
 
+### Camera-IMU again, after re-orienting the IMU (2026-09-12)
+
+The IMU was resoldered, its header wires re-pinned and the board re-oriented
+(see *IMU bringup*, 2026-09-12), so step 6 was redone. The intrinsics carry
+over: camera and focus are untouched. Same pipeline and target as 09-10, 60 s
+handheld outdoors at ~29,000 lux: 288 frames at 91 µs and gain 1.0, 22 % of
+pixels clipped, 28,990 IMU samples (26,328 inside the camera span).
+
+| | 09-10 | 09-12 |
+|---|---|---|
+| rotation, IMU → camera | identity + 2.21° | **180° about camera y + 4.39°** |
+| IMU origin in camera frame | (0.6, −2.5, −30.5) mm | (−1.5, +2.5, −29.8) mm |
+| time offset, t_imu = t_cam + | 2.18 ms | 2.22 ms |
+| reprojection, median | 0.40 px | 0.36 px |
+| gyro / accel, normalised median | 0.57 / 1.60 | 0.30 / 0.67 |
+
+The IMU's x and z are now the camera's reversed. The residual is 4.26° about
+camera x, against ~2.2° before: the board sits about 2° more tilted since the
+resolder. The gyro fit pins it, median residual 0.0033 rad/s. The time offset
+moved 0.03 ms and the IMU about 5 mm, so `VISO_POS_X/Y/Z` stand.
+
+**The 09-10 open item closes.** Accelerometer residuals are 0.67 of the noise
+model, not 1.6×, on a capture exposed 11× shorter (91 µs against 1 ms) and
+clipped less (22 % against a third) — which points at blur and clipping, not
+the IMU model.
+
+Updated to match: `openvins/hw_pi/kalibr_imucam_chain.yaml`, `R_CAM_IMU` in
+`vio_mavlink.py` and its tests, and the `--expect-accel` values under *The
+hardware ExternalNav link*. Files: `results/kalibr_imucam_2026-09-12-*`. The
+solve command, which 09-10 never recorded:
+
+    rosrun kalibr kalibr_calibrate_imu_camera --target aprilgrid_5x7_25mm.yaml \
+        --cam kalibr_cam0_2026-09-10-equi-camchain.yaml --imu imu_ism330dhcx.yaml \
+        --bag imucam_20260912.bag --dont-show-report
+
 ### Step 7 prepared: OpenVINS live on the Pi, no ROS (2026-09-10)
 
 `harness/vio_live/vio_live.cpp` is a native front end for OpenVINS built
@@ -2150,6 +2325,29 @@ clock is the first suspect and the wiring is the last;
 `harness/imu_probe.py` sweeps clock and mode and prints the matrix rather than
 assuming a speed. That sweep exists because the first version of the probe
 assumed 1 MHz and confidently reported a healthy part as dead.
+
+### The bus went quiet on the airframe, and a resolder fixed it (2026-09-12)
+
+On the airframe the RP1 controller got no answer at any clock or mode,
+1–14.3 MHz, the 10 MHz working point included: WHO_AM_I 0x00, dmesg
+`unsupported whoami [00]`. Bit-banging the same pins read 0x6B, so
+`harness/ism330dhcx-spigpio.dts` was written as a fallback that drives the bus
+from plain GPIOs. The IMU was then resoldered and its header wires re-pinned.
+
+Back on `ism330dhcx-spi0` (hardware SPI, 10 MHz), it matches the 09-10
+recovery reading for reading:
+
+| check | 2026-09-12 |
+|---|---|
+| driver probe | `spi0.0`, no WHO_AM_I error, two IIO devices |
+| one-shot \|a\| at rest | 9.58 m/s² |
+| `imu_irq_check.sh`, 15 s | 6,579 / 6,584 gyro samples at watermark 64 / 8; INT1 idles low |
+
+A marginal joint fits today's split: a slow bit-bang tolerates edges that
+10 MHz does not. Keep the spigpio overlay as the fallback if the bus goes quiet
+again. **Open, not blocking:** interrupts ran 6,593 at watermark 64 and 3,298
+at 8, where 64 should take about an eighth as many as 8, not twice as many.
+Every sample arrived, so it bears on delivery latency, not on data.
 
 ### The kernel driver enumerates, streams, and drifts 1.2 s per 10 minutes (2026-09-09)
 
