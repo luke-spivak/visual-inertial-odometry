@@ -448,11 +448,13 @@ Three things it has to do that the sim bridge did not:
   printed median lag is what `VISO_DELAY_MS` should be set to.
 
 **Mounting check before any VIO flight.** Level and still on the airframe, the
-Pi IMU must read ≈ **(+0.09, −8.83, +4.26) m/s²** for the 30° bracket, or
-(+0.13, −9.63, +1.83) for a 15° reprint (`vio_mavlink.py --expect-accel`, 2026-09-12 calibration). A positive
-y means the image is upside down, which this camera's is when the module is
-upright (see below): run with `--upside-down`, expecting ≈ (−0.18, +8.10, +5.52). Then by hand: nose down → the
-printed pitch goes negative; right side down → roll positive; yaw clockwise
+Pi IMU must read a row that `vio_mavlink.py --expect-accel` prints. On the 15°
+sensor plate (2026-09-14 calibration) that is ≈ (+0.12, −9.52, +2.35) m/s²
+upright and ≈ **(−0.12, +9.42, +2.73)** upside down. A positive y means the
+image is upside down, which this camera's is when the module is upright (see
+below): run with `--upside-down`. Measured on the airframe 2026-09-14:
+(+0.22, +9.20, +2.59), 1.0° from the upside-down row. Then by hand: nose down →
+the printed pitch goes negative; right side down → roll positive; yaw clockwise
 from above → yaw grows.
 
 **Parameters**, carried from milestones 4–5: `VISO_TYPE` 2 (Viso Align works
@@ -474,7 +476,8 @@ there is a real VIO hold, with GPS one switch-flip away.
   aircraft sitting still after power-up emits no poses, and ArduPilot reports
   `VisOdom: not healthy`. Move it once after INITIALIZED (the hand-rotation
   check does this) and poses flow from then on, even when it is set back down,
-  because `timelastupdate` is never reset.
+  because `timelastupdate` is never reset. **Fixed 2026-09-14:** `vio_live`
+  now writes poses from OpenVINS's initialisation on, so none of this applies.
 - **The camera's image is rotated 180° from the module.** Propped roughly
   upright with the lens near level, the Pi IMU read (+0.60, +9.52, −0.43) m/s² (IMU in its 09-10 orientation),
   +g on the image-down axis. A recorded frame shows why: the scene is upside
@@ -484,8 +487,8 @@ there is a real VIO hold, with GPS one switch-flip away.
   and are unaffected; only the mount mapping changes. **On the airframe, with the
   module mounted upright, run `vio_mavlink.py --upside-down`**, and expect the
   level-and-still reading to be the upside-down row of `--expect-accel`,
-  ≈ (−0.18, +8.10, +5.52) m/s² (2026-09-12 calibration). The two orientations differ in z as well as in
-  the sign of y, because Kalibr's 4.4° residual does not flip with the camera.
+  ≈ (−0.12, +9.42, +2.73) m/s² on the 15° plate (2026-09-14 calibration). The two orientations differ in z as well as in
+  the sign of y, because Kalibr's residual (1.4° now, 4.4° on the old bracket) does not flip with the camera.
 
 ### RAM is the F405's other limit (2026-09-11)
 
@@ -547,6 +550,184 @@ The sticks were not what made it feel twitchy. Roll, pitch and yaw rested within
 sticks at rest Loiter held at a median 0.05 m/s. The sensitivity is the response
 per unit of stick: `LOIT_SPEED_MS` 12.5 m/s at full deflection, and no expo.
 
+### VIO alongside GPS: diverged in the air, and a tip-over (2026-09-12)
+
+Two GPS Loiter flights with `vio_live` recording and the sender streaming:
+`log_4_2026-9-12-17-19-04.bin` with run `flight2` (99 s airborne) and
+`log_5_2026-9-12-17-26-42.bin` with run `flight2b` (67 s). `VISO_TYPE` was
+still 0, so the FC ignored the stream and logged no `VISP`. The comparison is
+the Pi's `est.txt` against EKF3, the clocks joined through GPS time and the
+estimate file's close time, then refined on tilt magnitude (correlation
+0.78–0.82). The QGC file names carry the log's *end* time, not takeoff.
+
+**VIO diverged within seconds of takeoff, both times.** The VIO velocity left
+the EKF's by more than 1 m/s at 5.4 s and 10.8 s after takeoff, and by landing
+the estimate claimed 30 and 113 m/s. While it lasted, roll and pitch agreed
+(`flight2`: median −0.7° / −2.7°) and the yaw offset held constant, so this is
+not a mount or axis error.
+
+**The cause is vibration at the Pi IMU**, read from the runs' own IMU recordings:
+
+| accel std per axis (m/s²) | IMU x | IMU y | IMU z |
+|---|---|---|---|
+| still, before arming | 0.01 | 0.01 | 0.01 |
+| armed, motors idling | 1.3 | 0.5–0.7 | 0.4–0.6 |
+| flying | **43–49** | 3.5–5.6 | 2.2–3.8 |
+
+Peaks reach 139 m/s² (14.2 g) against the ±16 g range, with one sample
+clipped, and the gyro shows 0.85–0.98 rad/s RMS about z. 98–100 % of the accel
+energy sits at **176–195 Hz**: the motor fundamental with the payload on (164 Hz
+without it). None of it is below 30 Hz, so it is not aliasing into the VIO
+band. IMU x is body lateral on this mount, so the bracket shakes side to side
+~10× harder than fore-aft or vertically: a lateral mode near the motor
+frequency, or something loose. The filter's noise model is 0.056 m/s² per
+sample (Allan ×5 at 440 Hz), ~850× below what it gets in the air.
+
+This is the case `camera-imu-bracket-spec.md` §8 left open: add isolation
+"only if you see … peaks approaching the ±16 g rail". They are at 14.2 g.
+Order: check the IMU board's and bracket's fasteners, since lateral rocking is
+the signature of something loose; replace and balance props; then the §8
+retrofit, Part 2 split on four balls with a 30–60 Hz corner, which is ~10–40×
+of attenuation at 184 Hz. Re-measure on a GPS hover with the same recording
+before any VIO hold.
+
+**Tap test, props off, on a towel.** Pi IMU at 833 Hz (`imu_log.py --odr 833`,
+881 Hz delivered), 7 flicks on the plate's side and 14 taps on its face:
+
+| mode | frequency | Q | signature |
+|---|---|---|---|
+| lateral / twist | **173 Hz** (171–184) | 12 | accel x with gyro z, lever 44 mm |
+| out-of-plane | 119 Hz | 11 | accel z with gyro x |
+
+The lateral mode is the one the motors drive: the same accel-to-rotation
+lever, 44 mm against 43 mm in flight. At Q 12 it sits just below the
+176–195 Hz hover band and amplifies it 6–11× there. The Part 1 joint is part of
+it, not only the arm. Grabbed at the top, the plate wiggles side to side by
+hand: two M3s on one line hold its in-plane rotation by friction alone, and
+once that slips their 0.2 mm hole clearance is ~1° of play. The one gentle
+flick rang at 184 Hz, the hard ones at 171–175 Hz, which is what a slipping
+joint does. (An earlier reading of the 44 mm lever as a hinge inside Part 2 was
+wrong: rotation about the bolts plus some sway gives the same number.) A
+shorter neck alone (~+10 % in frequency) would put the resonance on the hover
+band, and stiffening helps only past ~300 Hz. The fix is an isolator around
+the sensor plate with the plate captured on its carrier, specified in
+`camera-imu-bracket-spec.md` §8.
+
+**New mount (2026-09-13): shorter arm, rubber grommets, 15° tilt.** Tap test:
+side/twist mode 104 Hz (Q 12), face and edge modes 55–65 Hz, nothing at
+150–200 Hz. GPS hover `log_8_2026-9-13-19-21-26.bin` with the Pi IMU at 833 Hz
+(`~/imu/hover1`):
+
+| Pi IMU in flight | 2026-09-12 (rigid) | 2026-09-13 (grommets) |
+|---|---|---|
+| accel RMS per axis | 43–49 / 3.5–5.6 / 2.2–3.8 m/s² | 6.0 / 7.0 / 4.4 m/s² |
+| accel, vector total | ~48 m/s² | ~10 m/s² |
+| peaks | 14.2 g, clipping | 3.9 g, no clipping |
+| gyro at the motor frequency | ~0.9 rad/s | ~0.4 rad/s |
+
+About 5× less overall, and the clipping is gone, but short of the 3–5 m/s² per
+axis target. The energy still sits at the motor frequency (188 Hz), 80 %
+between 150 and 250 Hz. The FC's own `VIBE` was similar to the 12th, y
+somewhat higher (5.9 against 4.1 m/s²), so the frame input did not drop. The
+grommets are stiffer than the design target (104 Hz, not 30–60 Hz), which
+passes ~0.5 of the input at 188 Hz rather than ~0.1. At rest the IMU reads
+0.013 m/s², unchanged. Loosening the grommets to just seated moved the side
+mode only to 96 Hz (Q 8.6), ~0.36 transmission.
+
+**IMU low-pass in `vio_live` (2026-09-13).** Since the mount alone does not
+reach the target and the Tarot balls have no easy mounting, `vio_live` now
+low-passes both sensors before OpenVINS: a 2nd-order Butterworth at 50 Hz,
+designed at the 440 Hz delivered rate, on by default through
+`vio_live.py --imu-lpf 50` (0 turns it off). Gain is 0.99 at 20 Hz; 188 Hz is
+cut 133×, because the bilinear transform steepens it near Nyquist. The DC group
+delay, 4.31 ms (4.3–4.9 ms across 0–20 Hz), is taken off every IMU timestamp,
+and OpenVINS's online time-offset calibration takes up the rest. Recordings
+stay raw.
+
+Run over the 12th's raw in-flight IMU (the rigid mount, the worst case), it
+takes the content above 30 Hz from 48.4 / 5.5 / 3.7 to **0.51 / 0.32 / 0.12
+m/s²** and the gyro from 0.96 to 0.012 rad/s, while the flight motion below
+20 Hz passes unchanged (0.295 → 0.293 m/s²). Behind the grommet mount, which
+passes a third as much, that is ~0.15 m/s². The clipping that made filtering
+useless before is gone with the new mount. The pose lag the sender prints
+grows by the ~4 ms delay, so re-read it for `VISO_DELAY_MS`.
+
+### VIO alongside GPS, on the new plate: it holds (2026-09-14)
+
+`log_9_2026-9-14-10-12-00.bin`, 104 s airborne in strong wind, the new sensor
+plate, the 50 Hz IMU low-pass and the 09-14 calibration. With `VISO_TYPE` 2
+the FC logged the stream itself: 2,723 `VISP` at 19.1 Hz, no resets, none
+ignored. GPS was poor (4–7 satellites, HDOP 1.4–2.1): Loiter was refused at
+takeoff and the EKF took GPS only 62 s in, so the flight was AltHold.
+
+| VIO against | window | rotation | scale | RMS | path |
+|---|---|---|---|---|---|
+| raw GPS | 99 s airborne | +3.8° | **1.017** | **0.96 m** (max 1.89) | 72.7 m vs 73.7 m |
+| EKF on GPS | 56 s | −0.1° | 1.018 | 0.87 m | 40.9 m vs 42.0 m |
+
+Aligned on the first 15 s and left alone, VIO stays within 0.15–1.6 m of GPS
+over 74 m of path (max 2.27 m, 0.61 m at the end), inside what this GPS can
+resolve. Roll and pitch agree to a median −0.1° / −0.8° (95 % within 1.4° /
+1.9°), so there is no axis or mount error. Yaw sits a steady 8.0° off (spread
+2.2°): the backend aligned VIO's yaw to the AHRS at the first pose, on the
+ground, and the EKF's in-flight yaw alignment 22 s in moved the FC's yaw after
+that. Viso Align (`RC8`) before any source switch is what removes it. Against
+the 12th, where VIO left GPS within 5–11 s of takeoff and claimed 30–113 m/s,
+this is the vibration fix working.
+
+**Delay, measured.** VIO's roll and pitch trail the FC's attitude by 34 ms end
+to end (correlation 0.998, 0.31° RMS at that lag), camera exposure through the
+UART included. `VISO_DELAY_MS` 35, not 30.
+
+### First VIO holds (2026-09-14)
+
+`log_10_2026-9-14-11-20-50.bin`, windy, GPS 5–7 satellites (HDOP 1.2–1.4).
+Loiter on GPS, then Viso Align (`VisOdom: yaw shifted …`) and `Using EKF Source
+Set 3`, twice: a 36 s hands-off hold, and 31 s with a short excursion out and
+back, each ended by switching back to GPS.
+
+| segment | source | GPS wander std / max | VIO wander std / max | height error RMS |
+|---|---|---|---|---|
+| 28–36 s | GPS | 0.33 / 0.65 m | 0.19 / 0.33 m | 0.18 m |
+| 39–75 s | **VIO** | 0.62 / 1.07 m | 0.15 / 0.33 m | 0.20 m |
+| 78–87 s | GPS | 0.18 / 0.40 m | 0.16 / 0.40 m | 0.18 m |
+| 90–121 s | **VIO** | 0.99 / 1.68 m | 0.86 / 1.74 m | 0.17 m |
+
+On VIO the hold is tight in VIO's own frame, and the GPS wander around it is
+about this GPS's noise; over the 36 s hold VIO and GPS disagree by 1.4 m start
+to end, again at GPS's resolution. The out-and-back was short (2.4 m), so it
+says little yet: the tape-measured return is the number to get.
+
+**Altitude.** The height controller tracked its estimate equally well in both
+modes (0.2 m RMS), but the estimate itself wanders more on VIO. Against VIO's
+own smooth height, the EKF's detrended height moves 0.17–0.21 m RMS (max
+0.48 m) on the VIO source set, against 0.10–0.11 m on GPS. The difference is
+GPS vertical velocity (`EK3_SRC1_VELZ` 3) with nothing in its place on the VIO
+sets (`EK3_SRC2_VELZ` 0), which leaves the barometer alone in the wind. Fix:
+`vio_mavlink.py` now also sends `VISION_SPEED_ESTIMATE`, with `EK3_SRC2_VELZ`
+and `EK3_SRC3_VELZ` 6. Height stays on the barometer: the sim crash (*The fix
+that mattered most*) came from handing the altitude controller VIO's height
+itself, not its velocity.
+
+**Poses at rest.** `vio_live` now writes poses from OpenVINS's own
+initialisation instead of `initialized()`, so the FC sees VIO, and can arm,
+without the aircraft being lifted after INITIALIZED.
+
+**`log_5` tipped over at touchdown.** At 72.5 s, with the baro still reading
+0.45 m, a hard pitch-stick input met the ground. Accel held 1 g with the
+throttle at zero, so it was sitting on its legs. It then spun right at up to
+105 °/s with the yaw stick centred and the yaw controller saturated the other
+way, so the torque came from the ground, not the motors. A throttle blip at
+17–25° of roll tipped it over at 75.0 s, and the crash check disarmed it at
+77.2 s. Technique, not a fault: straight down, no cyclic in the last metre,
+disarm if it spins or tips on the ground.
+
+**Also found.** QGC shows lengths in feet, so `VISO_POS_X/Z` typed as 0.09 /
+−0.03 landed as 0.027 / −0.009 m; set its distance unit to metres. The sender's
+measured lag is 22 ms, plus ~5 ms on the UART, so `VISO_DELAY_MS` is 30.
+Onboard video of both flights, rotated upright at 19.2 fps:
+`~/vio/flight2_onboard.mp4` and `flight2b_onboard.mp4` on the Pi.
+
 ### Weight and thrust budget
 
 | Component | Mass (g) |
@@ -590,7 +771,9 @@ IMU (SPI) ─────┘                                                    
                                      GPS/compass, TF-Luna (I2C)
 ```
 
-**ArduPilot parameters:**
+**ArduPilot parameters** (the original plan, superseded: the live values are
+under *The hardware ExternalNav link*, 2026-09-11 — `VISO_TYPE` 2, since Viso
+Align works only in that backend, `EK3_SRC2_VELXY` 0, UART at 230400):
 ```
 VISO_TYPE = 1                  # MAVLink visual odometry
 VISO_POS_X / Y / Z             # camera offset from IMU (lever arm)
@@ -2020,6 +2203,36 @@ solve command, which 09-10 never recorded:
         --cam kalibr_cam0_2026-09-10-equi-camchain.yaml --imu imu_ism330dhcx.yaml \
         --bag imucam_20260912.bag --dont-show-report
 
+### Camera-IMU for the new sensor plate (2026-09-14)
+
+The rebuilt mount (one sensor plate on grommets, a shorter arm, 15° tilt;
+`camera-imu-bracket-spec.md` §8) moves the IMU, so step 6 again: same pipeline,
+target and command, bag `imucam_20260914.bag`. Lens and focus untouched, so the
+09-10 intrinsics carry over. 60 s handheld on the airframe, props off: 288
+frames, 28,998 IMU samples at 439.6 Hz covering the camera from 2.05 s before
+to 4.12 s after, gyro up to 292 dps, median clipping 0.02 %.
+
+| | 09-12 | 09-14 |
+|---|---|---|
+| rotation, IMU → camera | 180° about camera y + 4.39° | **180° about camera y + 1.37°** |
+| IMU origin in camera frame | (−1.5, +2.5, −29.8) mm | (−0.6, +1.2, −29.3) mm |
+| time offset, t_imu = t_cam + | 2.22 ms | 1.81 ms |
+| reprojection, median / mean | 0.36 / 0.49 px | 0.53 / 0.71 px |
+| gyro / accel, normalised median | 0.30 / 0.67 | 0.42 / 0.99 |
+
+The plate holds the board flatter: 1.2° about camera x, against 4.3°. The fit is
+looser than 09-12 but inside Kalibr's usual bounds. The accelerometer residuals
+have heavy tails (normalised mean 2.0, std 6.8), which points at a few moments
+in the sweep rather than at the model; re-capture if VIO shows a time-offset or
+extrinsic problem. Level and still on the airframe the Pi IMU reads
+(+0.22, +9.20, +2.59), 1.0° from the upside-down row at 15°, so the sender runs
+`--upside-down --tilt-deg 15`.
+
+Updated: `openvins/hw_pi/kalibr_imucam_chain.yaml`, `R_CAM_IMU` in
+`vio_mavlink.py` and its tests, and the `--expect-accel` values under *The
+hardware ExternalNav link*. `VISO_POS_X/Y/Z` wait on the new mount's camera
+position. Files: `results/kalibr_imucam_2026-09-14-*`.
+
 ### Step 7 prepared: OpenVINS live on the Pi, no ROS (2026-09-10)
 
 `harness/vio_live/vio_live.cpp` is a native front end for OpenVINS built
@@ -2735,7 +2948,7 @@ The pattern: pattern-matching from adjacent cases produces plausible answers tha
 
 ## Open questions
 
-- **Bracket tilt against the measured lens.** The bracket was built for a 118° lens; the lens measures 69° H / 42° V, so the 30° nose-down tilt leaves the horizon out of frame (top edge ~8° below horizontal) and puts nearly all features on the ground plane. A ~15° reprint would restore it. Deferred, not urgent (2026-09-10); a reprint means redoing step 6. See `camera-imu-bracket-spec.md` §7.
+- **Bracket tilt against the measured lens.** The bracket was built for a 118° lens; the lens measures 69° H / 42° V, so the 30° nose-down tilt leaves the horizon out of frame (top edge ~8° below horizontal) and puts nearly all features on the ground plane. **Done:** the rebuilt sensor plate sits at 15° (2026-09-13), and step 6 was redone for it (2026-09-14, *Camera-IMU for the new sensor plate*). See `camera-imu-bracket-spec.md` §7–8.
 - Airframe condition unknown — cracked arms, damaged ESC FETs, and bent motor shafts are all live possibilities. Triage gates everything.
 - Battery capacity, connector, and health unverified (cell count confirmed 4S).
 - ~~Whether visual odom + external nav actually fit in 1 MB alongside the rangefinder~~ — **answered 2026-09-03 by building it: yes, with 98 KB to spare.** See below. The binding constraint was never flash; it is that both features are compiled out by *source default* on a 1024 KB board.

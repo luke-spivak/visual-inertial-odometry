@@ -17,6 +17,11 @@ vio_live.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
 4. Records everything to <out>.{y16,meta.json,imu.json,imu_*.bin} unless
    --no-record, so the same run can be replayed on the VM through
    vio_bag_from_raw.py + replay_openvins.sh, and the estimate is <out>.est.txt.
+5. vio_live low-passes the IMU at --imu-lpf Hz (default 50) before OpenVINS,
+   against the motor vibration. The recording stays raw, so a replay is
+   unfiltered unless the replay filters it too.
+6. SIGTERM stops it the way Ctrl-C does, so vio_flight.py (started at boot by
+   vio@.service) can stop it and keep the recording.
 """
 import argparse, json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
 
@@ -29,6 +34,10 @@ W, H = 1280, 800
 
 def fail(msg):
     sys.exit(f"FAIL: {msg}")
+
+
+def _sigterm(signum, frame):
+    raise KeyboardInterrupt
 
 
 def ae_probe(max_shutter):
@@ -106,7 +115,12 @@ def main():
     # Walking rotates ~30-60 dps: 2-4 px of blur at 4 ms, which KLT tolerates.
     ap.add_argument("--max-shutter", type=int, default=4000)
     ap.add_argument("--watermark", type=int, default=8)
+    # The motors shake the sensor plate at 176-195 Hz; everything VIO needs is
+    # below ~20 Hz. 0 turns the filter off.
+    ap.add_argument("--imu-lpf", type=float, default=50.0, help="IMU low-pass cutoff, Hz; 0 = off")
     ap.add_argument("--no-record", action="store_true")
+    ap.add_argument("--est", help="estimate file; default <out>.est.txt. vio_flight.py keeps it on tmpfs, "
+                                  "so a full SD card costs the recording, not the poses")
     ap.add_argument("--bin", default=f"{user.pw_dir}/vio_live/vio_live")
     ap.add_argument("--config", default=f"{user.pw_dir}/vio_live/config/estimator_config.yaml")
     ap.add_argument("--verbosity", default="WARNING", help="OpenVINS print level")
@@ -117,7 +131,12 @@ def main():
         if not os.path.exists(f):
             fail(f"{f} not found -- run harness/vio_live/build.sh on the Mac")
     out = os.path.abspath(a.out)
+    est = os.path.abspath(a.est) if a.est else out + ".est.txt"
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    # Under systemd (vio_flight.py) a stop is SIGTERM to this process alone, with no
+    # tty to hand SIGINT to rpicam-raw and vio_live as well. Take it as a Ctrl-C:
+    # the finally block stops the camera, and vio_live ends when its FIFOs close.
+    signal.signal(signal.SIGTERM, _sigterm)
 
     print("=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===")
     sh, g = ae_probe(a.max_shutter)
@@ -133,7 +152,8 @@ def main():
     try:
         devs = imu_setup(a.watermark, out)
         vio = subprocess.Popen([a.bin, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
-                                "--config", a.config, "--out", out + ".est.txt", "--verbosity", a.verbosity]
+                                "--config", a.config, "--out", est, "--verbosity", a.verbosity,
+                                "--imu-lpf", str(a.imu_lpf)]
                                + ([] if a.no_record else ["--record", out]))
         time.sleep(1.5)
         if vio.poll() is not None:
@@ -148,12 +168,13 @@ def main():
         while cam.poll() is None and vio.poll() is None:
             time.sleep(0.2)
     except KeyboardInterrupt:
-        interrupted = True   # the tty sent SIGINT to rpicam-raw and vio_live too
+        interrupted = True   # Ctrl-C (the tty sent SIGINT to rpicam-raw and vio_live too), or SIGTERM
     finally:
         # A second Ctrl-C used to land here and SIGKILL vio_live before it had
         # written the recording's metadata (walk2, 2026-09-10: 362 frames, a
         # stale 236-record meta.json, unreplayable). Shutdown takes seconds.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if interrupted:
             print("\n=== stopping: waiting for vio_live's summary (further Ctrl-C is ignored) ===", flush=True)
         for p, grace in ((cam, 10), (vio, 60)):
@@ -162,7 +183,10 @@ def main():
             try:
                 if p is cam and cam.poll() is None:
                     cam.send_signal(signal.SIGINT)    # vio_live ended first; stop the camera
-                if p is vio and not interrupted and (cam is None or cam.returncode not in (0, None)):
+                # Also when interrupted: a SIGTERM before the camera started reached
+                # only this process, and vio_live would wait out its grace for FIFOs
+                # nobody will open. After a tty's Ctrl-C a second signal is harmless.
+                if p is vio and (cam is None or cam.returncode not in (0, None)):
                     vio.send_signal(signal.SIGTERM)   # camera never ran: nothing will close the FIFOs
                 p.wait(timeout=grace)
             except (subprocess.TimeoutExpired, KeyboardInterrupt):
@@ -175,7 +199,7 @@ def main():
     if cam is not None and cam.returncode not in (0, None) and not interrupted:
         print(f"rpicam-raw exited {cam.returncode}:")
         print("".join(open(out + ".cam.log").readlines()[-5:]))
-    print(f"\nfiles: {out}.est.txt" + ("" if a.no_record else f", recording {out}.{{y16,meta.json,imu.json,imu_*.bin}}"))
+    print(f"\nfiles: {est}" + ("" if a.no_record else f", recording {out}.{{y16,meta.json,imu.json,imu_*.bin}}"))
 
 
 if __name__ == "__main__":

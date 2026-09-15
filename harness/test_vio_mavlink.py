@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Tests for vio_mavlink's frame maths. Runs with plain python3 or pytest.
+"""Tests for vio_mavlink: the frame maths, and the Sender and Tail that
+vio_flight.py reuses. Runs with plain python3 or pytest.
 
 The round trip builds the quaternion OpenVINS would report for a known airframe
 attitude, feeds it through pose_to_ned, and requires that attitude back. That
 proves the algebra is self-consistent; the physical mounting is checked on the
 aircraft with --expect-accel and by hand."""
 import math
+import os
+import tempfile
+import time
 
 import vio_mavlink as vm
 
@@ -72,10 +76,18 @@ def test_position_enu_to_ned():
     assert (n, e, d) == (2.0, 1.0, -3.0)
 
 
+def test_velocity_uses_the_position_axis_swap():
+    # Integrating the sent velocity must move the sent position the same way.
+    p0, _ = vm.pose_to_ned((0.0, 0.0, 0.0, 1.0), (1.0, 2.0, 3.0), 15.0)
+    p1, _ = vm.pose_to_ned((0.0, 0.0, 0.0, 1.0), (1.5, 1.0, 2.0), 15.0)
+    v = vm.vel_to_ned((0.5, -1.0, -1.0))              # the G displacement over 1 s
+    assert all(abs(p1[i] - p0[i] - v[i]) < 1e-12 for i in range(3)), (p0, p1, v)
+
+
 def test_level_accel_at_30_deg():
     ax, ay, az = vm.expected_accel(30.0)
     # cos30 g = 8.49 on -y, sin30 g = 4.90 on +z: the IMU's z is the camera's reversed
-    # (Kalibr 2026-09-12), and its 4.3 deg about the camera x axis moves each by up to ~0.6
+    # (Kalibr 2026-09-14), and its ~1.2 deg about the camera x axis moves each by ~0.2
     assert abs(ax) < 0.3 and abs(ay + 8.49) < 0.5 and abs(az - 4.90) < 0.8, (ax, ay, az)
     assert abs(math.sqrt(ax * ax + ay * ay + az * az) - vm.GRAVITY) < 1e-6
 
@@ -92,12 +104,19 @@ def _angle_deg(a, b):
 
 
 def test_level_accel_upside_down_flips_y_and_splits_the_kalibr_residual():
-    up, down = vm.expected_accel(30.0), vm.expected_accel(30.0, True)
-    assert up[1] < -8.0 and down[1] > 8.0, (up, down)
-    # Kalibr's IMU-camera residual (~4.3 deg about the camera x axis) does not flip with
-    # the camera, so the apparent tilt is 30 - 4.3 upright and 30 + 4.3 upside-down.
+    up, down = vm.expected_accel(15.0), vm.expected_accel(15.0, True)
+    assert up[1] < -9.0 and down[1] > 9.0, (up, down)
+    # Kalibr's IMU-camera residual (~1.2 deg about the camera x axis, 2026-09-14) does not
+    # flip with the camera, so the apparent tilt is 15 - 1.2 upright and 15 + 1.2 upside-down.
     e_up, e_down = _elevation_deg(up), _elevation_deg(down)
-    assert abs((e_up + e_down) / 2 - 30.0) < 0.3 and abs((e_down - e_up) - 8.5) < 0.5, (e_up, e_down)
+    assert abs((e_up + e_down) / 2 - 15.0) < 0.3 and abs((e_down - e_up) - 2.3) < 0.5, (e_up, e_down)
+
+
+def test_live_pi_reading_2026_09_14_is_upside_down_on_the_15_deg_plate():
+    # On the airframe, level and still, 2026-09-14, on the new sensor plate.
+    reading = (0.22, 9.20, 2.59)
+    assert _angle_deg(vm.expected_accel(15.0, True), reading) < 3.0
+    assert _angle_deg(vm.expected_accel(15.0), reading) > 90.0
 
 
 # The 2026-09-10 rotation, identity + 2.2 deg: the IMU's mounting until it was
@@ -139,6 +158,71 @@ def test_level_camera_at_zero_tilt_looks_forward():
     r = vm.R_body_cam(0.0)
     assert [r[i][2] for i in range(3)] == [1.0, 0.0, 0.0]
     assert [r[i][1] for i in range(3)] == [-0.0, 0.0, 1.0]
+
+
+class FakeMav:
+    """Records what a pymavlink connection would have sent."""
+
+    def __init__(self):
+        self.mav, self.vpe, self.vse = self, [], []
+
+    def vision_position_estimate_send(self, usec, n, e, d, roll, pitch, yaw, cov, reset_counter):
+        self.vpe.append((usec, n, e, d, reset_counter))
+
+    def vision_speed_estimate_send(self, usec, vn, ve, vd, cov, reset_counter):
+        self.vse.append((usec, vn, ve, vd, reset_counter))
+
+
+def _est_line(t, p=(1.0, 2.0, 3.0), v=(0.5, -1.0, -1.0)):
+    """One vio_live estimate line: t, q (JPL xyzw), p, v, bg, ba."""
+    return " ".join(map(str, (t, 0.0, 0.0, 0.0, 1.0, *p, *v, 0, 0, 0, 0, 0, 0))) + "\n"
+
+
+def test_sender_sends_each_pose_once_in_ned():
+    mav = FakeMav()
+    s = vm.Sender(mav, 15.0, True)
+    now = time.monotonic()
+    assert not s.line("# timestamp(s) q(JPL xyzw) p v bg ba\n")
+    assert s.line(_est_line(now))
+    assert not s.line(_est_line(now))                        # the same stamp again
+    assert mav.vpe == [(int(now * 1e6), 2.0, 1.0, -3.0, 0)]  # ENU -> NED
+    assert mav.vse == [(int(now * 1e6), -1.0, 0.5, 1.0, 0)]
+
+
+def test_sender_drops_stale_poses_and_can_skip_velocity():
+    mav = FakeMav()
+    s = vm.Sender(mav, 15.0, velocity=False)
+    assert not s.line(_est_line(time.monotonic() - 1.0))    # older than max_lag 0.5 s
+    assert s.dropped == 1 and not mav.vpe
+    assert s.line(_est_line(time.monotonic()))
+    assert len(mav.vpe) == 1 and not mav.vse
+
+
+def test_sender_marks_each_new_run_with_a_new_reset_counter():
+    mav = FakeMav()
+    s = vm.Sender(mav, 15.0, True)
+    now = time.monotonic()
+    s.line(_est_line(now))
+    s.line(_est_line(now - 0.1))    # vio_live restarted into the same file: time went back
+    s.new_run()                     # vio_flight.py's next run, in a new file
+    s.line(_est_line(now - 0.2))
+    assert [v[-1] for v in mav.vpe] == [0, 1, 2]
+
+
+def test_tail_returns_whole_lines_and_survives_the_file_being_recreated():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "est.txt")
+        tail = vm.Tail(p)
+        assert tail.poll() == []                            # not there yet
+        with open(p, "w") as f:
+            f.write("a\nb")
+        assert tail.poll() == ["a\n"]                       # "b" is not a line yet
+        with open(p, "a") as f:
+            f.write("c\n")
+        assert tail.poll() == ["bc\n"]
+        with open(p, "w") as f:                             # recreated, shorter
+            f.write("x\n")
+        assert tail.poll() == ["x\n"]
 
 
 if __name__ == "__main__":

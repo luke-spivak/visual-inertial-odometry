@@ -450,16 +450,129 @@ The hover-test accel spectrum, exactly as the Active Cooler decision is made
 from logged CPU temperature. Add isolation only if you see energy you cannot
 filter or peaks approaching the ±16 g rail.
 
-### Retrofit path
+**Measured (2026-09-12): the rule is met.** In flight the IMU saw 43–49 m/s²
+RMS side to side, all at 176–195 Hz, with peaks at 14.2 g. A tap test puts the
+lateral/twist mode at **173 Hz, Q 12**, just below that band, and the
+out-of-plane mode at 119 Hz. Two things soften it: the Part 1 joint, below, and
+the arm twisting through its 4 mm flange (the "above 400 Hz" in §5.2 is for
+bending). PROJECT.md, *VIO alongside GPS*.
 
-Because damping lives entirely in Part 2, adding it costs one reprint and never
-touches the calibrated Part 1. Split Part 2 at the flange/spine junction into a
-flange piece and a spine piece joined by four silicone balls.
+**The Part 1 joint slips.** Grabbed at the top, the plate wiggles side to side
+by hand. §4.5's two M3s sit on one line, so in-plane rotation is held by
+friction alone, and once that slips their 0.2 mm hole clearance is ~1° of play,
+~0.8 mm at the top edge. The tap test agrees: the one gentle flick rang at
+184 Hz, the hard ones at 171–175 Hz, a joint that softens the harder it is
+pushed.
 
-**If you do:** size for a corner frequency of **30–60 Hz** — above the ~10 Hz
-control and VIO band, well below the 150 Hz motor fundamental. For the ~30 g
-supported mass that is roughly 1000–4000 N/m total. Verify by tapping and
-watching the spectrum; do not assume an off-the-shelf ball is in range.
+### Retrofit: a short arm and one isolated sensor plate
+
+A reprint with a new Kalibr run is accepted (Luke, 2026-09-12). That removes
+the reason for the Part 1 / Part 2 split, which was revising the mount without
+recalibrating. The rebuild has two parts, split where the balls go:
+
+- **Sensor plate (new Part 1).** One rigid piece carrying the camera, the IMU
+  and the four ball mounts. No joint between the sensors, so nothing to slip
+  and no bolt pattern to get right.
+- **Arm (new Part 2).** §5.1's flange and a shortened spine ending in a flat
+  ball backplate. It no longer carries the payload's mass directly, so its own
+  modes sit well clear of the motor band. The neck length stops mattering for
+  vibration and is set by prop clearance instead.
+
+**Why not one rigid arm-and-plate piece with no balls.** It would need its
+first twist mode above ~300 Hz to clear the motors at every throttle, not only
+at hover, and even then it passes the frame's own vibration through 1:1. The
+measured bracket sits at 173 Hz, ~3× short in stiffness. The balls work
+wherever the arm's mode lands.
+
+**Why not at the flange/spine junction**, as this section first said: the
+payload's CG sits ~37 mm ahead of that joint and the 26 mm flange limits the
+ball pattern to ~20 × 20 mm. Modelled on four balls with a 45 Hz bounce, it
+rocks at **10 Hz**, the pendulum described above. The balls have to surround
+the payload's CG.
+
+**Sensor plate**
+- Camera on the front (4 × M2, §4.3), IMU on the back behind it (2 × M2.5 on
+  metal standoffs, retention tab and keying lip, §4.4), zip-tie slots (§4.6),
+  witness marks (§4.7). Solid PETG, ≥ 4 mm, per §1.
+- **Four ball holes** on a rectangle centred on the assembly's CG (~3 mm above
+  the camera centre with today's parts; take it from the CAD's mass
+  properties) and clear of the IMU footprint (u ±14.2, v −2.1 … +18.1 about
+  the camera centre) by the ball's radius: ~40 × 48 mm on a plate of about
+  46 × 62. The balls' necks set the hole size and the local plate thickness.
+- Mass ≈ 45 g all in.
+
+**Arm**
+- Flange as §5.1, spine shortened per the table below.
+- **Ball backplate:** flat, normal `(0, cos TILT, −sin TILT)`, four matching
+  holes, and a window around the IMU with ≥ 3 mm clearance. It sits behind the
+  sensor plate by the ball stack height, which must also clear the IMU's 7.6 mm
+  stack if the IMU does not reach into the window.
+
+**Neck length** is now set by the sensor plate's top corners against the front
+prop discs in plan view, not by the field of view (§7: the lens is 69°).
+Clearance in mm:
+
+| `CAM_Y` | cantilever | 38 × 54 @ 30° | 46 × 62 @ 30° | 38 × 54 @ 15° | 46 × 62 @ 15° |
+|---|---|---|---|---|---|
+| +100 | 23 mm | 6.1 | 3.6 | 3.2 | 0.0 |
+| +105 | 28 mm | 8.6 | 6.4 | 5.3 | 2.3 |
+| +110 | 33 mm | 11.4 | 9.4 | 7.8 | 5.0 |
+| +115 | 38 mm | 14.4 | 12.6 | 10.5 | 7.9 |
+| +120 (today) | 43 mm | 17.6 | 16.1 | 13.5 | 11.0 |
+
+Keeping ≥ 8 mm, a 46 × 62 plate at 30° lands at `CAM_Y` ≈ +110, 10 mm
+shorter than today; at 15° it needs ≈ +115. **Decide `TILT` before printing:**
+30° as built, or ~15° to put the horizon back in view (§7). The recalibration
+happens either way.
+
+**Stiffness.** Per ball, for 45 g on a ~40 × 48 pattern: **≈ 1.3–1.9 N/mm along
+the ball's axis**, ~0.6 N/mm sideways. A tighter 26 × 31 pattern needs 2–2.7
+and isolates rocking better but twist worse. Modelled (6-DOF, loss factor
+0.15), all modes fall between 32 and ~120 Hz, and at 184 Hz the IMU sees
+0.11–0.12 of the arm's side-to-side motion and 0.21–0.24 of its twist, against
+6–11× today: roughly 25–100× less.
+
+**Travel.** Sag is ~0.05–0.1 mm per g, and a hard landing is 10–20 g. Keep
+≥ 3 mm clear between the sensor plate and anything on the arm except the
+balls; any contact bypasses the isolation.
+
+**Retention.** Silicone balls pull out under crash loads. Add a slack tether,
+braided line or a zip tie through a slot in the sensor plate and one in the
+arm, with ~3 mm of slack so it never goes taut in flight.
+
+**Cables.** The CSI ribbon and IMU wires cross the isolator. Tie them to the
+sensor plate's slots and to the arm with a 15–20 mm service loop between; a
+taut ribbon is a stiff spring across the balls.
+
+**Balls to buy.** Tarot's fluid-filled gimbal balls, Shore 25A, in two sizes:
+small **TL10A09** (6.5 mm holes, 70 g per ball) and medium **TL10A05/TL10A10**
+(9.3 mm holes, 100–180 g per ball). A load rating is not a stiffness, so buy a
+pack of each and measure before fixing the hole size in CAD: one ball between
+two flat plates, a known weight on top, calipers on the height. Target: **200 g
+compresses one ball ~1–1.5 mm**. If both are softer, use 6–8 balls or preload
+the stack 0.5–1 mm; widening the pattern raises only the rocking modes.
+**Not flight-controller grommets** (M2/M3 "anti-vibration balls" for FC stacks,
+~5 mm across): they are sized for a ~10 g board, and a mode that lands at
+120–170 Hz amplifies 184 Hz instead of cutting it. Press-test anything before
+designing around it.
+
+### Tuning
+
+Frequency goes as √(stiffness / mass). Stiffer balls, more balls or preload
+raise every mode; spreading the balls raises only the rocking and twist modes.
+
+1. Static test (above) to choose the ball.
+2. Tap test as on 2026-09-12 (`imu_log.py --odr 833`): flick the side, tap the
+   face, tap a corner. Every mode should land between 25 and 110 Hz, with
+   nothing ringing at 150–200 Hz.
+3. Lowest mode under ~25 Hz: stiffer. Over ~45 Hz: softer.
+4. GPS hover with `vio_live` recording: the Pi IMU under ~3 m/s² RMS side to
+   side, against 43–49 today.
+
+**Downstream.** New Kalibr camera-IMU run once assembled, then update
+`R_CAM_IMU` in `vio_mavlink.py` and its tests,
+`openvins/hw_pi/kalibr_imucam_chain.yaml`, the `--expect-accel` values,
+`VISO_POS_X/Y/Z` from the new geometry, and `--tilt-deg` if `TILT` changes.
 
 ---
 
@@ -468,8 +581,9 @@ watching the spectrum; do not assume an off-the-shelf ball is in range.
 - [ ] Confirm nothing is shimmed between the arm and the middle plate (`Z_MID`)
 - [ ] Print Part 2 alone, offer it up to the frame, confirm the 4 flange holes
       land on the standoffs and nothing fouls the middle plate
-- [ ] Tap-test the assembled bracket once the IMU streams — first mode should be
-      **above 400 Hz**. A peak below ~200 Hz means the spine is too shallow.
+- [ ] Tap-test the assembled bracket once the IMU streams. The rigid build as
+      first printed measured **173 Hz** (2026-09-12). With the isolator: every
+      mode 25–110 Hz and nothing at 150–200 Hz (§8).
 - [ ] Confirm the IMU keying lip permits only one board orientation
 - [ ] With the camera streaming, check the props against the frame edges before
       committing to `CAM_Y`; adjust and reprint Part 2 only

@@ -63,7 +63,8 @@ cp "$REPO"/openvins/hw_pi/*.yaml "$REPO/$B/bundle/config/"
 echo "  bundle: vio_live + $(ls "$REPO/$B/bundle/lib" | wc -l | tr -d ' ') libs ($n the Pi lacked), $(du -sh "$REPO/$B/bundle" | cut -f1)"
 
 rsync -a --delete "$REPO/$B/bundle/" "$PI:vio_live/"
-scp -q "$REPO/harness/vio_live.py" "$REPO/harness/imu_log.py" "$REPO/harness/vio_mavlink.py" "$PI:harness/"
+scp -q "$REPO/harness/vio_live.py" "$REPO/harness/imu_log.py" "$REPO/harness/vio_mavlink.py" \
+    "$REPO/harness/vio_flight.py" "$REPO/harness/vio@.service" "$PI:harness/"
 
 ssh "$PI" 'missing=$(ldd ~/vio_live/vio_live | grep "not found" || true)
 [ -z "$missing" ] || { echo "  FAIL: on the Pi:"; echo "$missing"; exit 1; }

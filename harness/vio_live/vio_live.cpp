@@ -10,7 +10,11 @@
 //                  layout of OpenVINS's save_total_state, so vio_closure.py reads it
 //   --record PFX   optional: write PFX.y16, PFX.meta.json, PFX.imu_{accel,gyro}.bin
 //                  in the capture script's format, so vio_bag_from_raw.py can
-//                  replay this exact run offline on the VM
+//                  replay this exact run offline on the VM. The IMU is recorded
+//                  raw, before the low-pass below.
+//   --imu-lpf HZ   optional: low-pass the IMU at HZ before OpenVINS sees it
+//                  (2nd-order Butterworth, designed at --imu-rate, default 440 Hz,
+//                  the rate the part delivers at ODR 416). See ImuLowPass.
 //
 // Threads mirror OpenVINS's own ROS 2 node (ROS2Visualizer): IMU samples are fed
 // as they arrive; a camera frame is processed once the IMU has passed its
@@ -18,7 +22,8 @@
 // IMU reading never waits on an update.
 //
 // Timestamps: IIO samples and SensorTimestamp are both CLOCK_MONOTONIC (udev
-// rule + patched driver; libcamera natively). Nothing here offsets either.
+// rule + patched driver; libcamera natively). The only offset applied here is
+// the low-pass's group delay, taken off the IMU timestamps.
 
 #include <fcntl.h>
 #include <poll.h>
@@ -28,6 +33,7 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <csignal>
 #include <cstdio>
@@ -100,8 +106,59 @@ struct ImuDev {
   FILE *rec_fp = nullptr;
 };
 
+// The motors shake the sensor plate at their rotation rate, 176-195 Hz in a
+// hover, and the grommet mount passes about a third of it: 6-7 m/s^2 RMS per
+// axis in flight against 0.01 at rest (PROJECT.md, VIO alongside GPS). The
+// filter's noise model is ~0.06 m/s^2 per sample, so it would trust the IMU
+// ~100x beyond what it gets. Everything VIO needs sits below ~20 Hz, so a
+// 50 Hz low-pass costs nothing in band (gain 0.99 at 20 Hz) and cuts 188 Hz
+// 133x -- the bilinear transform steepens it near Nyquist.
+//
+// Its price is delay: ~4.3 ms at 50 Hz, 4.3-4.9 ms across 0-20 Hz. The DC
+// value is taken off every IMU timestamp so filtered samples line up with the
+// camera; OpenVINS's online time-offset calibration takes up the rest.
+struct ImuLowPass {
+  bool on = false;
+  double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
+  int64_t delay_ns = 0;
+
+  void design(double fc, double fs) {
+    const double K = std::tan(M_PI * fc / fs), n = 1.0 / (1.0 + M_SQRT2 * K + K * K);
+    b0 = K * K * n;
+    b1 = 2 * b0;
+    b2 = b0;
+    a1 = 2 * (K * K - 1) * n;
+    a2 = (1 - M_SQRT2 * K + K * K) * n;
+    const double samples = (b1 + 2 * b2) / (b0 + b1 + b2) - (a1 + 2 * a2) / (1 + a1 + a2);
+    delay_ns = int64_t(samples / fs * 1e9);
+    on = true;
+  }
+};
+
+// One sensor's filter state, transposed direct form II, one lane per axis.
+struct ImuLowPassState {
+  Eigen::Vector3d s1 = Eigen::Vector3d::Zero(), s2 = Eigen::Vector3d::Zero();
+  int64_t last_t = 0;
+
+  Eigen::Vector3d step(const ImuLowPass &f, int64_t t, const Eigen::Vector3d &x) {
+    if (!f.on) return x;
+    // First sample, or a gap in the stream: restart at steady state on this
+    // sample rather than ringing out of stale state.
+    if (!last_t || t < last_t || t - last_t > 50000000LL) {
+      s1 = x * (1 - f.b0);
+      s2 = x * (f.b2 - f.a2);
+    }
+    last_t = t;
+    const Eigen::Vector3d y = f.b0 * x + s1;
+    s1 = f.b1 * x - f.a1 * y + s2;
+    s2 = f.b2 * x - f.a2 * y;
+    return y;
+  }
+};
+
 struct Shared {
   std::shared_ptr<ov_msckf::VioManager> sys;
+  ImuLowPass lpf;
   int W = 1280, H = 800;
 
   std::mutex meta_mtx;
@@ -152,6 +209,7 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
   if (!acc || !gyr) die("--imu must list both accel and gyro");
 
   std::deque<std::pair<int64_t, Eigen::Vector3d>> aq, gq;
+  ImuLowPassState af, gf;
   std::vector<uint8_t> buf(64 * 1024);
   pollfd p[2] = {{acc->fd, POLLIN, 0}, {gyr->fd, POLLIN, 0}};
 
@@ -187,7 +245,8 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
         int64_t t;
         Eigen::Vector3d v;
         parse(d, buf.data() + o, t, v);
-        (i == 0 ? aq : gq).emplace_back(t, v);
+        v = (i == 0 ? af : gf).step(S.lpf, t, v);
+        (i == 0 ? aq : gq).emplace_back(t - S.lpf.delay_ns, v);
       }
     }
     // Lay rows on the gyro's timestamps with accel interpolated onto them --
@@ -335,14 +394,25 @@ static void update_thread(Shared &S, FILE *out) {
     if (!S.vio_init && S.sys->initialized_time() > 0) {
       S.vio_init = true;
       ov_core::Printer::setPrintLevel(S.run_verbosity);
-      printf("\n  *** INITIALIZED at t=%.3f s -- holding still on zero-velocity updates; lift it and walk ***\n\n",
+      printf("\n  *** INITIALIZED at t=%.3f s -- poses streaming; zero-velocity updates hold it while it rests ***\n\n",
              S.sys->initialized_time());
       fflush(stdout);
     }
 
     auto state = S.sys->get_state();
     calib_dt = state->_calib_dt_CAMtoIMU->value()(0);
-    if (!S.sys->initialized()) continue;
+    // Poses go out from OpenVINS's own initialisation, not from initialized(),
+    // which also waits for a full visual update that ZUPT at rest never allows.
+    // At rest the ZUPT-held state (still, gravity-aligned) is the right answer,
+    // and ArduPilot will not arm under VISO_TYPE 2 until poses arrive: gating on
+    // initialized() meant lifting the aircraft after INITIALIZED (2026-09-14).
+    if (!S.vio_init) continue;
+    static bool first_update = false;
+    if (!first_update && S.sys->initialized()) {
+      first_update = true;
+      printf("\n  --- moving: first full visual update at t=%.3f s ---\n\n", state->_timestamp);
+      fflush(stdout);
+    }
     auto imu = state->_imu;
     Eigen::Vector4d q = imu->quat();
     Eigen::Vector3d p = imu->pos(), v = imu->vel(), bg = imu->bias_g(), ba = imu->bias_a();
@@ -356,8 +426,6 @@ static void update_thread(Shared &S, FILE *out) {
       S.init_t = state->_timestamp;
       S.p_first = p;
       S.p_last = p;
-      printf("\n  --- moving: first full update at t=%.3f s ---\n\n", state->_timestamp);
-      fflush(stdout);
     }
     S.path_m += (p - S.p_last).norm();
     S.p_last = p;
@@ -397,6 +465,7 @@ static long lsm_irq_count() {
 int main(int argc, char **argv) {
   std::string imu_cfg, frames_fifo, meta_fifo, config, out_path, record, verbosity = "WARNING", init_verbosity = "INFO";
   size_t max_queue = 10;
+  double imu_lpf_hz = 0, imu_rate_hz = 440;
   Shared S;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -412,10 +481,20 @@ int main(int argc, char **argv) {
     else if (a == "--width") S.W = std::stoi(next());
     else if (a == "--height") S.H = std::stoi(next());
     else if (a == "--max-queue") max_queue = std::stoul(next());
+    else if (a == "--imu-lpf") imu_lpf_hz = std::stod(next());
+    else if (a == "--imu-rate") imu_rate_hz = std::stod(next());
     else die("unknown argument " + a);
   }
   if (imu_cfg.empty() || frames_fifo.empty() || meta_fifo.empty() || config.empty() || out_path.empty())
-    die("usage: vio_live --imu FILE --frames FIFO --meta FIFO --config YAML --out FILE [--record PREFIX]");
+    die("usage: vio_live --imu FILE --frames FIFO --meta FIFO --config YAML --out FILE [--record PREFIX]"
+        " [--imu-lpf HZ [--imu-rate HZ]]");
+  if (imu_lpf_hz > 0) {
+    if (imu_lpf_hz >= 0.45 * imu_rate_hz) die("--imu-lpf must sit well below half of --imu-rate");
+    S.lpf.design(imu_lpf_hz, imu_rate_hz);
+    printf("IMU low-pass %.0f Hz (2nd-order Butterworth at %.0f Hz): IMU timestamps shifted by -%.2f ms\n",
+           imu_lpf_hz, imu_rate_hz, S.lpf.delay_ns * 1e-6);
+    fflush(stdout);
+  }
 
   struct sigaction sa{};
   sa.sa_handler = on_signal;
@@ -503,7 +582,7 @@ int main(int argc, char **argv) {
     printf("[%6.1f s] imu %3.0f Hz | cam %4.1f in %4.1f done fps, %ld dropped | update %4.0f ms avg %4.0f max | lag %4.0f ms | %s",
            (t - start) * 1e-9, (imu - last_imu) / dt, (in - last_in) / dt, (done - last_done) / dt,
            long(S.frames_dropped), avg, double(S.upd_ms_max), double(S.lag_ms_last),
-           S.init ? "" : (S.vio_init ? "INITIALIZED, holding still -- lift it and walk\n" : "not initialized yet -- keep the rig still\n"));
+           S.init ? "" : (S.vio_init ? "INITIALIZED\n" : "not initialized yet -- keep the rig still\n"));
     if (S.init)
       printf("p %+6.2f %+6.2f %+6.2f m  |v| %.2f m/s  path %.1f m\n", S.p_last(0), S.p_last(1), S.p_last(2), S.v_last.norm(), S.path_m);
     long irq = lsm_irq_count();
@@ -548,7 +627,7 @@ int main(int argc, char **argv) {
     printf("  closure  %.3f m = %.2f %% of path (end minus first initialized position; run vio_closure.py for the at-rest average)\n",
            d.norm(), S.path_m > 0 ? 100 * d.norm() / S.path_m : 0.0);
   } else if (S.vio_init) {
-    printf("  initialized but never moved -- ZUPT holds it at rest; lift the rig once it says INITIALIZED\n");
+    printf("  initialized, but no pose was written\n");
   } else {
     printf("  NEVER INITIALIZED -- the rig must rest still for a few seconds first\n");
   }
