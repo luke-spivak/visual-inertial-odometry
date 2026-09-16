@@ -15,7 +15,7 @@ I also built tools to simulate flights, replay recordings, measure error, and di
 A camera captures the scene while a motion sensor measures acceleration and rotation. OpenVINS combines these readings on a Raspberry Pi to estimate the drone’s position, orientation, and velocity. My software sends those estimates to ArduPilot, which controls the motors to execute the flight.
 All motion estimation runs onboard.
 
-https://github.com/user-attachments/assets/e7e14323-1aef-48ec-923d-263cbb5268eb
+https://github.com/user-attachments/assets/a9257289-9d6e-4e03-8482-2031439a4af6
 
 Onboard camera footage showing the visual features OpenVINS tracks to estimate the drone’s motion without GPS.
 
