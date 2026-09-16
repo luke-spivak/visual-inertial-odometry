@@ -5,6 +5,8 @@ This project uses visual-inertial odometry (VIO)—combining camera images with 
 I built the hardware and software integration needed to run OpenVINS onboard a small quadcopter. The work included synchronizing the sensors, calibrating their alignment, running the estimator on a Raspberry Pi, and translating its output into movement estimates ArduPilot can use.
 I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
 
+https://github.com/user-attachments/assets/e7e14323-1aef-48ec-923d-263cbb5268eb
+
 ## How it works
 
 A camera captures the scene while a motion sensor measures acceleration and rotation. OpenVINS combines these readings on a Raspberry Pi to estimate the drone’s position, orientation, and velocity. My software sends those estimates to ArduPilot, which controls the motors to execute the flight.
