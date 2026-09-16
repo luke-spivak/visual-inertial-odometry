@@ -1,4 +1,5 @@
-# Visual-Inertial Odometry Quadcopter
+# Flying a drone without GPS using onboard vision
+This project uses visual-inertial odometry (VIO)—combining camera images with motion-sensor readings to estimate how the drone moves.
 
 I built the hardware and software integration needed to run OpenVINS onboard a small quadcopter. The work included synchronizing the sensors, calibrating their alignment, running the estimator on a Raspberry Pi, and translating its output into movement estimates ArduPilot can use.
 I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
