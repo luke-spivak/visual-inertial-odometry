@@ -1,14 +1,17 @@
 # Flying a drone without GPS using onboard vision
+
 This project uses visual-inertial odometry (VIO)—combining camera images with motion-sensor readings to estimate how the drone moves.
 
 I built the hardware and software integration needed to run OpenVINS onboard a small quadcopter. The work included synchronizing the sensors, calibrating their alignment, running the estimator on a Raspberry Pi, and translating its output into movement estimates ArduPilot can use.
 I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
 
 ## How it works
+
 A camera captures the scene while a motion sensor measures acceleration and rotation. OpenVINS combines these readings on a Raspberry Pi to estimate the drone’s position, orientation, and velocity. My software sends those estimates to ArduPilot, which controls the motors to execute the flight.
 All motion estimation runs onboard.
 
 ## Results
+
 - Real flight: Completed an autonomous takeoff, position hold, and landing using VIO for both horizontal positioning and altitude.
 - Simulation: Completed drone missions without GPS using vision-based navigation.
 
@@ -22,7 +25,7 @@ All motion estimation runs onboard.
 | [docs/](docs/) | Setup, hardware specifications, development history, and archived plans |
 | [results/](results/) | Recorded measurements, plots, and experiment reports |
 
-TThe onboard software runs without ROS; simulation uses ROS 2 and Gazebo.
+The onboard software runs without ROS; simulation uses ROS 2 and Gazebo.
 
 ## Run and test
 

@@ -4,6 +4,22 @@ Run repository commands from its root. This project has three environments:
 a desktop for analysis/builds, the Raspberry Pi for live VIO, and a Linux
 ROS 2 environment for simulation/replay.
 
+## Runtime and configuration
+
+The live path is `src/vio_flight.py` → `src/vio_live.py` →
+`src/openvins_runner/vio_live.cpp`, with `src/vio_mavlink.py` sending the resulting
+poses to ArduPilot. `src/imu_log.py` also provides the sensor setup used at runtime.
+Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
+
+Simulation configuration is in `sim/config/`; hardware configuration is in
+`src/config/`. The latter is specific to the calibrated sensor assembly.
+Mission plans are in `src/missions/`. Historical flight-controller parameters
+are in `results/config-snapshots/`, not a current recommended configuration.
+
+Large datasets and local environments stay outside the tracked source tree.
+Historical experiment records may refer to paths used before the directory
+reorganization; commands in this guide use the current layout.
+
 ## Desktop tests and analysis
 
 ```sh
@@ -24,6 +40,12 @@ The feature logger also has a standalone C++17 test:
 c++ -std=c++17 -pthread -I src/openvins_runner \
   src/openvins_runner/test_feature_log.cpp -o /tmp/vio-feature-log-test
 /tmp/vio-feature-log-test /tmp/vio-feature-log-test.jsonl
+```
+
+Score a retained handheld estimate without hardware or ROS:
+
+```sh
+python tools/vio_closure.py results/vio_walk3_2026-09-10-live-estimate.txt
 ```
 
 ## Raspberry Pi
