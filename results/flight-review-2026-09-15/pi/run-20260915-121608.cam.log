@@ -1,0 +1,19 @@
+[0:00:12.143724881] [1138]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:00:12.152433548] [1140]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:00:12.162054677] [1140]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:00:12.163085918] [1140]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:00:12.163101140] [1140]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+[0:00:12.177627196] [1140]  WARN V4L2 v4l2_pixelformat.cpp:346 Unsupported V4L2 pixel format Nc30
+[0:00:12.177660455] [1140]  WARN V4L2 v4l2_pixelformat.cpp:346 Unsupported V4L2 pixel format Nc12
+Mode selection for 1280:800:8:P(20)
+    R8,640x400/309.789 - Score: 2080
+    R8,1280x720/171.792 - Score: 226.667
+    R8,1280x800/143.658 - Score: 0
+    R10_CSI2P,640x400/247.831 - Score: 3080
+    R10_CSI2P,1280x720/137.419 - Score: 1226.67
+    R10_CSI2P,1280x800/114.929 - Score: 1000
+Stream configuration adjusted
+[0:00:12.177799659] [1138]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-YUV420/Rec709 (1) 1280x800-R16/RAW
+[0:00:12.177837659] [1140]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+[0:00:12.182011659] [1145]  WARN IPARPI ipa_base.cpp:1296 Could not set SHARPNESS - no sharpen algorithm
+Raw stream: 1280x800 stride 2560 format R16

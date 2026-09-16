@@ -49,6 +49,8 @@
 #include <Eigen/Dense>
 #include <opencv2/core.hpp>
 
+#include "feature_log.h"
+#include "track/TrackBase.h"
 #include "core/VioManager.h"
 #include "core/VioManagerOptions.h"
 #include "state/State.h"
@@ -156,8 +158,31 @@ struct ImuLowPassState {
   }
 };
 
+// Camera updates are serialized by update_thread; copy both tracker arrays there.
+class LoggedVioManager : public ov_msckf::VioManager {
+public:
+  using ov_msckf::VioManager::VioManager;
+  std::vector<FeaturePoint> snapshot() {
+    auto obs = trackFEATS->get_last_obs();
+    auto ids = trackFEATS->get_last_ids();
+    std::vector<FeaturePoint> points;
+    const float scale = params.downsample_cameras ? 2.f : 1.f;
+    const auto &uv = obs[0]; const auto &id = ids[0];
+    if (uv.size() != id.size()) return points;
+    points.reserve(id.size());
+    for (size_t i = 0; i < id.size(); ++i)
+      points.push_back({id[i], uv[i].pt.x * scale, uv[i].pt.y * scale});
+    return points;
+  }
+};
+struct CapturedFrame {
+  ov_core::CameraData camera;
+  int64_t timestamp_ns;
+  size_t frame_index;
+};
 struct Shared {
-  std::shared_ptr<ov_msckf::VioManager> sys;
+  std::shared_ptr<LoggedVioManager> sys;
+  FeatureLog features;
   ImuLowPass lpf;
   int W = 1280, H = 800;
 
@@ -168,7 +193,7 @@ struct Shared {
 
   std::mutex q_mtx;
   std::condition_variable q_cv;
-  std::deque<ov_core::CameraData> cam_q;
+  std::deque<CapturedFrame> cam_q;
   bool frames_done = false;
 
   std::atomic<int64_t> last_imu_ns{0};
@@ -351,7 +376,7 @@ static void frame_thread(Shared &S, int fd, FILE *rec_fp, FILE *meta_fp, size_t 
         S.cam_q.pop_front();
         S.frames_dropped++;
       }
-      S.cam_q.push_back(std::move(c));
+      S.cam_q.push_back({std::move(c), ts, idx - 1});
     }
     S.q_cv.notify_one();
   }
@@ -366,10 +391,10 @@ static void update_thread(Shared &S, FILE *out) {
   double calib_dt = S.sys->get_state()->_calib_dt_CAMtoIMU->value()(0);
   int64_t stall_since = 0;
   while (true) {
-    ov_core::CameraData c;
+    CapturedFrame captured;
     {
       std::unique_lock<std::mutex> lk(S.q_mtx);
-      auto ready = [&] { return !S.cam_q.empty() && S.cam_q.front().timestamp < S.last_imu_ns * 1e-9 - calib_dt; };
+      auto ready = [&] { return !S.cam_q.empty() && S.cam_q.front().camera.timestamp < S.last_imu_ns * 1e-9 - calib_dt; };
       S.q_cv.wait_for(lk, std::chrono::milliseconds(100), [&] { return ready() || S.frames_done; });
       if (!ready()) {
         if (!S.frames_done) continue;
@@ -379,11 +404,16 @@ static void update_thread(Shared &S, FILE *out) {
         if (now_ns() - stall_since > 1000000000LL) break;
         continue;
       }
-      c = std::move(S.cam_q.front());
+      captured = std::move(S.cam_q.front());
       S.cam_q.pop_front();
     }
+    auto &c = captured.camera;
     int64_t t0 = now_ns();
     S.sys->feed_measurement_camera(c);
+    if (S.features.active())
+      S.features.push({captured.timestamp_ns, captured.frame_index, S.W, S.H,
+                       S.sys->initialized_time() > 0, S.sys->snapshot()});
+
     int64_t t1 = now_ns();
     double ms = (t1 - t0) * 1e-6;
     S.upd_ms_sum = S.upd_ms_sum + ms;
@@ -509,7 +539,7 @@ int main(int argc, char **argv) {
   params.print_and_load(parser);
   params.use_multi_threading_subs = true;
   if (!parser->successful()) die("OpenVINS could not parse " + config + " -- see the output above");
-  S.sys = std::make_shared<ov_msckf::VioManager>(params);
+  S.sys = std::make_shared<LoggedVioManager>(params);
   if (params.camera_intrinsics.at(0)->w() != S.W || params.camera_intrinsics.at(0)->h() != S.H)
     die("config resolution does not match the camera stream");
 
@@ -546,6 +576,8 @@ int main(int argc, char **argv) {
     if (!meta_json) die("cannot write " + record + ".meta.json");
     fprintf(meta_json, "[\n");
   }
+
+  if (!record.empty()) S.features.start(record + ".features.jsonl");
 
   std::thread ti(imu_thread, std::ref(S), std::ref(devs));
   std::thread tu(update_thread, std::ref(S), out);
@@ -603,6 +635,8 @@ int main(int argc, char **argv) {
 
   tf.join();
   tu.join();
+  S.features.close();
+  printf("  feature logging dropped %zu records\n", S.features.dropped.load());
   g_stop = true;  // camera is finished: stop the IMU and metadata readers
   ti.join();
   tm.join();

@@ -40,7 +40,7 @@ def _sigterm(signum, frame):
     raise KeyboardInterrupt
 
 
-def ae_probe(max_shutter):
+def ae_probe(max_shutter, fixed_shutter=None, fixed_gain=None):
     """Same probe as kalibr_capture_imucam.sh: let AE settle, keep its exposure
     product, cap the shutter and move the rest into gain."""
     subprocess.run(["rpicam-raw", "-n", "--mode", f"{W}:{H}:8", "--width", str(W), "--height", str(H),
@@ -49,12 +49,49 @@ def ae_probe(max_shutter):
     last = json.load(open("/tmp/ae.json"))[-1]
     os.remove("/tmp/ae.y16"); os.remove("/tmp/ae.json")
     P = last["ExposureTime"] * last["AnalogueGain"]
-    sh = int(min(P, max_shutter)); g = max(1.0, P / sh)
+    if fixed_shutter is not None:
+        sh = int(fixed_shutter)
+        g = float(fixed_gain if fixed_gain is not None else 1.0)
+    else:
+        sh = int(min(P, max_shutter)); g = max(1.0, P / sh)
     print(f"  auto-exposure: {last['ExposureTime']} us x gain {last['AnalogueGain']:.2f} at ~{last.get('Lux', 0):.0f} lux"
           f" -> fixed {sh} us, gain {g:.2f}")
     if g > 16:
         fail(f"needs gain {g:.0f} at {sh} us -- too dark. Add light and rerun.")
     return sh, g
+
+
+def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000)):
+    """Choose the shortest fixed exposure whose raw frames are not clipped."""
+    results = []
+    for shutter in candidates:
+        path = f"/tmp/exposure-sweep-{shutter}.y16"
+        subprocess.run(["rpicam-raw", "-n", "--mode", f"{W}:{H}:8", "--width", str(W), "--height", str(H),
+                        "--framerate", "20", "--shutter", str(shutter), "--gain", "1",
+                        "--frames", "30", "-o", path], capture_output=True)
+        try:
+            data = open(path, "rb").read()
+            pixels = data[1::2]
+            if not pixels:
+                continue
+            clipped = sum(v >= 250 for v in pixels) / len(pixels)
+            mean = sum(pixels) / len(pixels)
+            results.append((shutter, clipped, mean))
+        finally:
+            try: os.remove(path)
+            except OSError: pass
+    if not results:
+        fail("exposure sweep produced no frames")
+    # Prefer the brightest candidate that remains below the clipping limit.
+    # Choosing the shortest usable exposure made bright outdoor runs needlessly
+    # dark: on run-20260915-173409, 20 us had mean 39 DN while 50 us had mean
+    # 106 DN and still stayed just below the 1% clipping limit.
+    usable = [r for r in results if r[1] <= 0.01 and r[2] >= 15]
+    chosen = max(usable, key=lambda r: r[2]) if usable else min(results, key=lambda r: r[1])
+    print("  exposure sweep: " + ", ".join(f"{s} us={clip*100:.2f}% clip, mean={mean:.1f}"
+                                           for s, clip, mean in results))
+    print(f"  exposure sweep selected {chosen[0]} us, gain 1.00 (brightest under clipping limit)")
+    return chosen[0], 1.0
 
 
 def imu_setup(watermark, out):
@@ -114,6 +151,10 @@ def main():
     # the rig still -- no usable tracks, and the filter coasted on the IMU.
     # Walking rotates ~30-60 dps: 2-4 px of blur at 4 ms, which KLT tolerates.
     ap.add_argument("--max-shutter", type=int, default=4000)
+    ap.add_argument("--shutter", type=int, help="override the AE result; exposure time in microseconds")
+    ap.add_argument("--gain", type=float, help="analogue gain used with --shutter; default 1")
+    ap.add_argument("--exposure-sweep", action="store_true",
+                    help="test fixed exposures and select the brightest one below the clipping limit")
     ap.add_argument("--watermark", type=int, default=8)
     # The motors shake the sensor plate at 176-195 Hz; everything VIO needs is
     # below ~20 Hz. 0 turns the filter off.
@@ -139,7 +180,11 @@ def main():
     signal.signal(signal.SIGTERM, _sigterm)
 
     print("=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===")
-    sh, g = ae_probe(a.max_shutter)
+    if a.gain is not None and a.shutter is None:
+        ap.error("--gain requires --shutter")
+    if a.exposure_sweep and a.shutter is not None:
+        ap.error("--exposure-sweep cannot be combined with --shutter")
+    sh, g = exposure_sweep() if a.exposure_sweep else ae_probe(a.max_shutter, a.shutter, a.gain)
     with open(out + ".exposure.json", "w") as f:
         json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)
 
@@ -150,6 +195,17 @@ def main():
     vio = cam = None
     interrupted = False
     try:
+        if not a.no_record:
+            try:
+                # Preserve calibration/config used to interpret feature coordinates.
+                with open(out + ".recording.json", "w") as manifest:
+                    json.dump({"version": 1, "width": W, "height": H,
+                               "argv": sys.argv, "clock": "CLOCK_MONOTONIC",
+                               "config_files": {name: open(os.path.join(os.path.dirname(a.config), name)).read()
+                                                for name in os.listdir(os.path.dirname(a.config))
+                                                if name.endswith(".yaml")}}, manifest, indent=2)
+            except OSError as e:
+                print(f"Could not save recording manifest: {e}")
         devs = imu_setup(a.watermark, out)
         vio = subprocess.Popen([a.bin, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
                                 "--config", a.config, "--out", est, "--verbosity", a.verbosity,
@@ -191,6 +247,13 @@ def main():
                 p.wait(timeout=grace)
             except (subprocess.TimeoutExpired, KeyboardInterrupt):
                 p.kill(); p.wait()
+        if not a.no_record and vio is not None and vio.returncode == 0:
+            try:
+                with open(out + ".complete.json", "w") as marker:
+                    json.dump({"version": 1, "vio_exit": vio.returncode,
+                               "camera_exit": cam.returncode if cam else None}, marker)
+            except OSError as e:
+                print(f"Could not write completion marker: {e}")
         imu_log.teardown(devs.values())
         shutil.rmtree(fdir, ignore_errors=True)
         for f in os.listdir(os.path.dirname(out)):

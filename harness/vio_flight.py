@@ -268,7 +268,13 @@ def main():
     ap.add_argument("--upright", action="store_true",
                     help="camera image upright on the airframe; this one's is upside down (--expect-accel)")
     ap.add_argument("--min-free-gb", type=float, default=20.0, help="record only with this much free space")
+    ap.add_argument("--shutter", type=int, help="override camera exposure time in microseconds")
+    ap.add_argument("--gain", type=float, help="analogue gain used with --shutter; default 1")
+    ap.add_argument("--exposure-sweep", action="store_true",
+                    help="select the brightest usable exposure at each VIO run")
     a = ap.parse_args()
+    if a.gain is not None and a.shutter is None:
+        ap.error("--gain requires --shutter")
     if os.geteuid() != 0:
         sys.exit("FAIL: vio_live.py needs root for the IMU: run with sudo (vio@.service does)")
     if not os.path.isdir(a.dir):
@@ -289,7 +295,12 @@ def main():
         f"{'upright' if a.upright else 'upside-down'}")
     signal.signal(signal.SIGTERM, lambda s, f: STOP.update(sig=s))
     signal.signal(signal.SIGINT, lambda s, f: STOP.update(sig=s))
-    fly(a, Link(conn), user, [sys.executable, "-u", os.path.join(HERE, "vio_live.py")])
+    vio_cmd = [sys.executable, "-u", os.path.join(HERE, "vio_live.py")]
+    if a.shutter is not None:
+        vio_cmd += ["--shutter", str(a.shutter), "--gain", str(a.gain if a.gain is not None else 1.0)]
+    elif a.exposure_sweep:
+        vio_cmd += ["--exposure-sweep"]
+    fly(a, Link(conn), user, vio_cmd)
 
 
 if __name__ == "__main__":

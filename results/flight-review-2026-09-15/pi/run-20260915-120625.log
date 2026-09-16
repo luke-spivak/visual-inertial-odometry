@@ -1,0 +1,478 @@
+=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===
+  auto-exposure: 99 us x gain 1.00 at ~44820 lux -> fixed 99 us, gain 1.00
+  imu: one-shot |accel| 9.56 m/s^2
+  imu: gyro /dev/iio:device0 odr 416.0 scale 0.00122173 watermark 8
+  imu: accel /dev/iio:device1 odr 416.0 scale 0.00478564 watermark 8
+IMU low-pass 50 Hz (2nd-order Butterworth at 440 Hz): IMU timestamps shifted by -4.31 ms
+Setting printing level to: INFO
+vio_live: estimator up; waiting for the camera
+=== camera: 1280x800 at 20 fps, 99 us, gain 1.00. Keep the rig STILL until it says INITIALIZED. Ctrl-C to stop. ===
+[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,60 < 15
+[0m[   2.0 s] imu 617 Hz | cam 12.0 in 12.0 done fps, 0 dropped | update    6 ms avg   26 max | lag   14 ms | not initialized yet -- keep the rig still
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.08 ms | read gap max    5 ms
+[33m[init]: disparity is 0.320,0.841 (20.00 thresh)
+[0m[32m[init]: successful initialization in 0.0002 seconds
+[0m[32m[init]: orientation = 0.4312, -0.4111, -0.5753, 0.5604
+[0m[32m[init]: bias gyro = 0.0014, -0.0133, -0.0029
+[0m[32m[init]: velocity = 0.0000, 0.0000, 0.0000
+[0m[32m[init]: bias accel = 0.0083, -0.2256, -0.0684
+[0m[32m[init]: position = 0.0000, 0.0000, 0.0000
+[0mSetting printing level to: WARNING
+
+  *** INITIALIZED at t=11.787 s -- poses streaming; zero-velocity updates hold it while it rests ***
+
+[   4.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg   24 max | lag   15 ms | p  -0.00  -0.00  +0.00 m  |v| 0.01 m/s  path 0.0 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  1.09 ms | read gap max    3 ms
+[   6.0 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  +0.00  -0.00  +0.00 m  |v| 0.00 m/s  path 0.0 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[   8.0 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  -0.00  +0.00 m  |v| 0.01 m/s  path 0.0 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  10.0 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  -0.00  +0.00 m  |v| 0.02 m/s  path 0.0 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  12.0 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.01  -0.00  +0.00 m  |v| 0.02 m/s  path 0.0 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.24 ms | read gap max    3 ms
+[  14.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  +0.00  +0.00 m  |v| 0.02 m/s  path 0.0 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  16.0 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  +0.00  +0.00 m  |v| 0.02 m/s  path 0.0 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  18.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  +0.00  +0.00 m  |v| 0.02 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  20.0 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.01  +0.00  +0.00 m  |v| 0.02 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  22.0 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  +0.00  +0.00 m  |v| 0.02 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  24.0 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.01  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    3 ms
+[  26.0 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.65 ms | read gap max    3 ms
+[  28.0 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  30.0 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  32.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    5 ms
+[  34.0 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.01 ms | read gap max    3 ms
+[  36.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    4 ms
+[  38.0 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  40.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  42.0 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.27 ms | read gap max    3 ms
+[  44.0 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[  46.0 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    5 ms
+[  48.0 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.01 ms | read gap max    3 ms
+[  50.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  52.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  54.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  56.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  58.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[  60.1 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    5 ms
+[  62.1 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  64.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    4 ms
+[  66.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    4 ms
+[  68.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   18 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  70.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  72.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  74.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[  76.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    3 ms
+[  78.1 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   18 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  80.1 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  82.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    5 ms
+[  84.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[  86.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  88.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    9 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.03 ms | read gap max    3 ms
+[  90.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  92.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[  94.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  96.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[  98.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 100.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 102.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 104.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.01 ms | read gap max    4 ms
+[ 106.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.04 ms | read gap max    5 ms
+[ 108.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 110.1 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 112.1 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.90 ms | read gap max    3 ms
+[ 114.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 116.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.01 ms | read gap max    5 ms
+[ 118.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.36 ms | read gap max    3 ms
+[ 120.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 122.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 124.1 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.04 ms | read gap max    4 ms
+[ 126.1 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.01 ms | read gap max    3 ms
+[ 128.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 130.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 132.1 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    4 ms
+[ 134.1 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 136.1 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 138.1 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 140.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 142.2 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    7 ms
+[ 144.2 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 146.2 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 148.2 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 150.2 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 152.2 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 154.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    5 ms
+[ 156.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 158.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 160.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.01 ms | read gap max    5 ms
+[ 162.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 164.2 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 166.2 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 168.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 170.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 172.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    5 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 174.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 176.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 178.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 180.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    4 ms
+[ 182.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 184.2 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 186.2 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.40 ms | read gap max    4 ms
+[ 188.2 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    5 ms avg    6 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 190.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    5 ms avg    6 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 192.2 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  1.03 ms | read gap max    4 ms
+[ 194.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 196.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  2.13 ms | read gap max    4 ms
+[ 198.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    8 ms
+[ 200.2 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 202.2 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 204.2 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 206.2 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  2.13 ms | read gap max    3 ms
+[ 208.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   19 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 210.2 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    5 ms avg    8 max | lag   15 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    6 ms
+[ 212.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 214.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 216.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 218.2 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    4 ms
+[ 220.2 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 222.3 s] imu 439 Hz | cam 19.4 in 19.4 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 224.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 226.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   18 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 228.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 230.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 232.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 234.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 236.3 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 238.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    4 ms
+[ 240.3 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.06 ms | read gap max    3 ms
+[ 242.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 244.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 246.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 248.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 250.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 252.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.32 ms | read gap max    5 ms
+[ 254.3 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 256.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  2.16 ms | read gap max    5 ms
+[ 258.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 260.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 262.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 264.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.41 ms | read gap max    3 ms
+[ 266.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 268.3 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 270.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 272.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 274.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    5 ms
+[ 276.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 278.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  1.59 ms | read gap max    3 ms
+[ 280.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 282.3 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 284.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 286.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 288.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 290.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 292.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 294.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 296.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 298.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 300.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.69 ms | read gap max    3 ms
+[ 302.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 304.3 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    5 ms
+[ 306.3 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.93 ms | read gap max    3 ms
+[ 308.3 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    5 ms
+[ 310.3 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 312.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 314.3 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.22 ms | read gap max    3 ms
+[ 316.3 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 318.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.34 ms | read gap max    3 ms
+[ 320.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 322.4 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 324.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 326.4 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 328.4 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 330.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 332.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.01 ms | read gap max    4 ms
+[ 334.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 336.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 338.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 340.4 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 342.4 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 344.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 346.4 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 348.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 350.4 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 352.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 354.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.47 ms | read gap max    3 ms
+[ 356.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 358.4 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 360.4 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 362.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 364.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.01 ms | read gap max    4 ms
+[ 366.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 368.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 370.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    6 ms
+[ 372.4 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   18 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 374.4 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.03 ms | read gap max    4 ms
+[ 376.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 378.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 380.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 382.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.27 ms | read gap max    5 ms
+[ 384.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 386.4 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 388.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 390.4 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 392.4 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg   10 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 394.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 396.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 398.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 400.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 402.4 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.03 ms | read gap max    3 ms
+[ 404.4 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 406.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 408.4 s] imu 440 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    9 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.77 ms | read gap max    3 ms
+[ 410.4 s] imu 439 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.01 ms | read gap max    4 ms
+[ 412.4 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   18 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 414.4 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    4 ms
+[ 416.5 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.41 ms | read gap max    5 ms
+[ 418.5 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 420.5 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 422.5 s] imu 439 Hz | cam 19.5 in 19.0 done fps, 0 dropped | update    7 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 424.5 s] imu 440 Hz | cam 19.0 in 19.5 done fps, 0 dropped | update    7 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  2.06 ms | read gap max    4 ms
+[ 426.5 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    1 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 428.5 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    0 ms ago | feed max  0.02 ms | read gap max    5 ms
+[ 430.5 s] imu 440 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    6 ms avg    8 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.03 ms | read gap max    7 ms
+[ 432.5 s] imu 439 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    7 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 434.5 s] imu 439 Hz | cam 19.0 in 19.0 done fps, 0 dropped | update    7 ms avg    7 max | lag   17 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  439/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+[ 436.5 s] imu 440 Hz | cam 19.5 in 19.5 done fps, 0 dropped | update    6 ms avg    8 max | lag   16 ms | p  -0.00  +0.00  +0.00 m  |v| 0.01 m/s  path 0.1 m
+           diag: irq  440/s | kernel buffer 0/0 samples | imu thread last seen    2 ms ago | feed max  0.02 ms | read gap max    3 ms
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

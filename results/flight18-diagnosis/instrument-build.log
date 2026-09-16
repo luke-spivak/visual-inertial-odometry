@@ -1,0 +1,130 @@
+ninja: Entering directory `build/vio_live/ov'
+[1/3] Building CXX object CMakeFiles/ov_msckf_lib.dir/src/update/UpdaterMSCKF.cpp.o
+In file included from /usr/include/boost/math/distributions/chi_squared.hpp:13,
+                 from /work/build/vio_live/open_vins/ov_msckf/src/update/UpdaterMSCKF.cpp:36:
+/usr/include/boost/math/special_functions/gamma.hpp: In instantiation of 'boost::math::detail::upper_incomplete_gamma_fract<T>::result_type boost::math::detail::upper_incomplete_gamma_fract<T>::operator()() [with T = long double; result_type = std::pair<long double, long double>]':
+/usr/include/boost/math/tools/fraction.hpp:217:20:   required from 'typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_a(Gen&, const U&, uintmax_t&) [with Gen = boost::math::detail::upper_incomplete_gamma_fract<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double; uintmax_t = long unsigned int]'
+  217 |    value_type v = g();
+      |                   ~^~
+/usr/include/boost/math/tools/fraction.hpp:252:31:   required from 'typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_a(Gen&, const U&) [with Gen = boost::math::detail::upper_incomplete_gamma_fract<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double]'
+  252 |    return continued_fraction_a(g, factor, max_iter);
+      |           ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:314:68:   required from 'T boost::math::detail::upper_gamma_fraction(T, T, T) [with T = long double]'
+  314 |    return 1 / (z - a + 1 + boost::math::tools::continued_fraction_a(f, eps));
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:1176:44:   required from 'T boost::math::detail::gamma_incomplete_imp(T, T, bool, bool, const Policy&, T*) [with T = long double; Policy = boost::math::policies::policy<boost::math::policies::promote_float<false>, boost::math::policies::promote_double<false>, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+ 1176 |          result += log(upper_gamma_fraction(a, x, policies::get_epsilon<T, Policy>()));
+      |                        ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:356:67:   required from 'std::tuple<T, T, T> boost::math::detail::gamma_p_inverse_func<T, Policy>::operator()(const T&) const [with T = double; Policy = boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+  356 |       f = static_cast<T>(boost::math::detail::gamma_incomplete_imp(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  357 |                static_cast<value_type>(a),
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~                         
+  358 |                static_cast<value_type>(x),
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~                         
+  359 |                true, invert,
+      |                ~~~~~~~~~~~~~                                       
+  360 |                forwarding_policy(), &ft));
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~                           
+/usr/include/boost/math/tools/roots.hpp:550:35:   required from 'T boost::math::tools::detail::second_order_root_finder(F, T, T, T, int, uintmax_t&) [with Stepper = halley_step; F = boost::math::detail::gamma_p_inverse_func<double, boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy> >; T = double; uintmax_t = long unsigned int]'
+  550 |             detail::unpack_tuple(f(result), f0, f1, f2);
+      |                                  ~^~~~~~~~
+/usr/include/boost/math/tools/roots.hpp:723:64:   required from 'T boost::math::tools::halley_iterate(F, T, T, T, int, uintmax_t&) [with F = boost::math::detail::gamma_p_inverse_func<double, boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy> >; T = double; uintmax_t = long unsigned int]'
+  723 |    return detail::second_order_root_finder<detail::halley_step>(f, guess, min, max, digits, max_iter);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:446:33:   required from 'T boost::math::detail::gamma_p_inv_imp(T, T, const Policy&) [with T = double; Policy = boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+  446 |    guess = tools::halley_iterate(
+      |            ~~~~~~~~~~~~~~~~~~~~~^
+  447 |       detail::gamma_p_inverse_func<T, Policy>(a, p, false),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  448 |       guess,
+      |       ~~~~~~                     
+  449 |       lower,
+      |       ~~~~~~                     
+  450 |       tools::max_value<T>(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~     
+  451 |       digits,
+      |       ~~~~~~~                    
+  452 |       max_iter);
+      |       ~~~~~~~~~                  
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:525:34:   required from 'boost::math::tools::promote_args_t<RT1, RT2> boost::math::gamma_p_inv(T1, T2, const Policy&) [with T1 = double; T2 = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>; tools::promote_args_t<RT1, RT2> = double]'
+  525 |    return detail::gamma_p_inv_imp(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~^
+  526 |       static_cast<result_type>(a),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  527 |       static_cast<result_type>(p), pol);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/distributions/chi_squared.hpp:169:39:   required from 'RealType boost::math::quantile(const chi_squared_distribution<RealType, Policy>&, const RealType&) [with RealType = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>]'
+  169 |    return 2 * boost::math::gamma_p_inv(degrees_of_freedom / 2, p, Policy());
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/work/build/vio_live/open_vins/ov_msckf/src/update/UpdaterMSCKF.cpp:54:49:   required from here
+   54 |     chi_squared_table[i] = boost::math::quantile(chi_squared_dist, 0.95);
+      |                            ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:299:16: note: parameter passing for argument of type 'std::pair<long double, long double>' when C++17 is enabled changed to match C++14 in GCC 10.1
+  299 |    result_type operator()()
+      |                ^~~~~~~~
+[2/3] Building CXX object CMakeFiles/ov_msckf_lib.dir/src/update/UpdaterSLAM.cpp.o
+In file included from /usr/include/boost/math/distributions/chi_squared.hpp:13,
+                 from /work/build/vio_live/open_vins/ov_msckf/src/update/UpdaterSLAM.cpp:37:
+/usr/include/boost/math/special_functions/gamma.hpp: In instantiation of 'boost::math::detail::upper_incomplete_gamma_fract<T>::result_type boost::math::detail::upper_incomplete_gamma_fract<T>::operator()() [with T = long double; result_type = std::pair<long double, long double>]':
+/usr/include/boost/math/tools/fraction.hpp:217:20:   required from 'typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_a(Gen&, const U&, uintmax_t&) [with Gen = boost::math::detail::upper_incomplete_gamma_fract<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double; uintmax_t = long unsigned int]'
+  217 |    value_type v = g();
+      |                   ~^~
+/usr/include/boost/math/tools/fraction.hpp:252:31:   required from 'typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_a(Gen&, const U&) [with Gen = boost::math::detail::upper_incomplete_gamma_fract<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double]'
+  252 |    return continued_fraction_a(g, factor, max_iter);
+      |           ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:314:68:   required from 'T boost::math::detail::upper_gamma_fraction(T, T, T) [with T = long double]'
+  314 |    return 1 / (z - a + 1 + boost::math::tools::continued_fraction_a(f, eps));
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:1176:44:   required from 'T boost::math::detail::gamma_incomplete_imp(T, T, bool, bool, const Policy&, T*) [with T = long double; Policy = boost::math::policies::policy<boost::math::policies::promote_float<false>, boost::math::policies::promote_double<false>, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+ 1176 |          result += log(upper_gamma_fraction(a, x, policies::get_epsilon<T, Policy>()));
+      |                        ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:356:67:   required from 'std::tuple<T, T, T> boost::math::detail::gamma_p_inverse_func<T, Policy>::operator()(const T&) const [with T = double; Policy = boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+  356 |       f = static_cast<T>(boost::math::detail::gamma_incomplete_imp(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  357 |                static_cast<value_type>(a),
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~                         
+  358 |                static_cast<value_type>(x),
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~                         
+  359 |                true, invert,
+      |                ~~~~~~~~~~~~~                                       
+  360 |                forwarding_policy(), &ft));
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~                           
+/usr/include/boost/math/tools/roots.hpp:550:35:   required from 'T boost::math::tools::detail::second_order_root_finder(F, T, T, T, int, uintmax_t&) [with Stepper = halley_step; F = boost::math::detail::gamma_p_inverse_func<double, boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy> >; T = double; uintmax_t = long unsigned int]'
+  550 |             detail::unpack_tuple(f(result), f0, f1, f2);
+      |                                  ~^~~~~~~~
+/usr/include/boost/math/tools/roots.hpp:723:64:   required from 'T boost::math::tools::halley_iterate(F, T, T, T, int, uintmax_t&) [with F = boost::math::detail::gamma_p_inverse_func<double, boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy> >; T = double; uintmax_t = long unsigned int]'
+  723 |    return detail::second_order_root_finder<detail::halley_step>(f, guess, min, max, digits, max_iter);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:446:33:   required from 'T boost::math::detail::gamma_p_inv_imp(T, T, const Policy&) [with T = double; Policy = boost::math::policies::policy<boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]'
+  446 |    guess = tools::halley_iterate(
+      |            ~~~~~~~~~~~~~~~~~~~~~^
+  447 |       detail::gamma_p_inverse_func<T, Policy>(a, p, false),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  448 |       guess,
+      |       ~~~~~~                     
+  449 |       lower,
+      |       ~~~~~~                     
+  450 |       tools::max_value<T>(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~     
+  451 |       digits,
+      |       ~~~~~~~                    
+  452 |       max_iter);
+      |       ~~~~~~~~~                  
+/usr/include/boost/math/special_functions/detail/igamma_inverse.hpp:525:34:   required from 'boost::math::tools::promote_args_t<RT1, RT2> boost::math::gamma_p_inv(T1, T2, const Policy&) [with T1 = double; T2 = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>; tools::promote_args_t<RT1, RT2> = double]'
+  525 |    return detail::gamma_p_inv_imp(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~^
+  526 |       static_cast<result_type>(a),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  527 |       static_cast<result_type>(p), pol);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/distributions/chi_squared.hpp:169:39:   required from 'RealType boost::math::quantile(const chi_squared_distribution<RealType, Policy>&, const RealType&) [with RealType = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>]'
+  169 |    return 2 * boost::math::gamma_p_inv(degrees_of_freedom / 2, p, Policy());
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/work/build/vio_live/open_vins/ov_msckf/src/update/UpdaterSLAM.cpp:57:49:   required from here
+   57 |     chi_squared_table[i] = boost::math::quantile(chi_squared_dist, 0.95);
+      |                            ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/boost/math/special_functions/gamma.hpp:299:16: note: parameter passing for argument of type 'std::pair<long double, long double>' when C++17 is enabled changed to match C++14 in GCC 10.1
+  299 |    result_type operator()()
+      |                ^~~~~~~~
+[3/3] Linking CXX shared library libov_msckf_lib.so

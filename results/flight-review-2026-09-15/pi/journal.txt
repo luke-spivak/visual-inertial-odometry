@@ -1,0 +1,21 @@
+total 0
+=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===
+  auto-exposure: 99 us x gain 1.00 at ~40144 lux -> fixed 99 us, gain 1.00
+  imu: one-shot |accel| 9.55 m/s^2
+  imu: gyro /dev/iio:device0 odr 416.0 scale 0.00122173 watermark 8
+  imu: accel /dev/iio:device1 odr 416.0 scale 0.00478564 watermark 8
+IMU low-pass 50 Hz (2nd-order Butterworth at 440 Hz): IMU timestamps shifted by -4.31 ms
+Setting printing level to: INFO
+vio_live: estimator up; waiting for the camera
+=== camera: 1280x800 at 20 fps, 99 us, gain 1.00. Keep the rig STILL until it says INITIALIZED. Ctrl-C to stop. ===
+[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,3 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,59 < 15

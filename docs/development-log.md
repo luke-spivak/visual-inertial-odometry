@@ -728,6 +728,60 @@ measured lag is 22 ms, plus ~5 ms on the UART, so `VISO_DELAY_MS` is 30.
 Onboard video of both flights, rotated upright at 19.2 fps:
 `~/vio/flight2_onboard.mp4` and `flight2b_onboard.mp4` on the Pi.
 
+### VIO mission launch procedure (2026-09-15)
+
+**User-confirmed setting:** `AUTO_OPTIONS = 1` now allows arming directly in
+AUTO. Raising the throttle is still required to start the takeoff; this is
+not `AUTO_OPTIONS = 3` (takeoff on arming). `DISARM_DELAY` was 10 s in the
+September 15 log. The mission is takeoff to 1.5 m above home at 0.3 m/s,
+hold for 30 s, then land at 0.3 m/s and disarm.
+
+**At the field**
+
+1. Place the aircraft at the takeoff spot with the camera facing texture.
+   Arm switch off, throttle down, mode AUTO. Start with VIO selected once
+   that startup sequence has been checked with props off; until then, retain
+   the tested GPS-start → VIO switch before arming.
+2. Power up and leave it still. In QGC's vehicle messages, look for
+   **`VIO initialized`** and **`EKF3 IMU0 origin set`**. Confirm FC readiness
+   and a reported home position. No fixed one-minute timer is needed. Do not
+   wait for `VIO first visual update`: that message occurs after movement.
+3. With VIO selected and ready to launch, **arm in AUTO, then raise the
+   throttle to centre**. There is no Loiter-to-AUTO switch after arming. If
+   the idle disarm timeout expires, return the arm switch off and arm again
+   when ready. The mission runs, lands, and disarms.
+4. **Takeover: centre throttle and select AltHold.** This stops AUTO but does
+   not remove the altitude estimator from the control loop. Changing only
+   the source switch to GPS leaves the AUTO mission running; it is not a
+   mission-abort action.
+
+**Readiness means:** the Pi emits `VIO initialized` through MAVLink STATUSTEXT
+when OpenVINS initializes. The FC checks that enabled visual odometry is
+healthy and that the attitude checks pass; AUTO also requires a usable
+position estimate. The September 15 logs show rejected arming with
+`VisOdom: not healthy`, `VisOdom: yaw diff … (>10)`, and
+`AHRS: waiting for home`. `AUTO_OPTIONS=1` does not bypass these checks.
+Successful arming is not proof of correct VIO scale, velocity fusion, or
+recording, and does not independently guarantee a current GPS fix when VIO
+is the active source. Check the VIO recording status separately when collecting
+data (`VIO run … recording` versus `NOT recording`).
+
+**Origin versus home:** GPS normally supplies the EKF origin once per boot;
+the FC reports it as `GPS_GLOBAL_ORIGIN`. Home is reported as `HOME_POSITION`
+and normally refreshed to the current location on arming. A GPS satellite
+count alone does not confirm either. Without GPS, a companion could supply
+the field's latitude, longitude, and altitude above mean sea level with
+`SET_GPS_GLOBAL_ORIGIN`, verify the returned origin, and verify home separately.
+That companion feature is not implemented in `vio_flight.py`; the current
+procedure still waits for GPS to establish the origin.
+
+**Outstanding flight issue:** simplifying the launch does not resolve the
+September 15 altitude/fusion findings. See
+[`results/flight-review-2026-09-15/README.md`](results/flight-review-2026-09-15/README.md).
+
+References: [AUTO mode](https://ardupilot.org/copter/docs/auto-mode.html),
+[home and EKF origin](https://ardupilot.org/dev/docs/mavlink-get-set-home-and-origin.html).
+
 ### Weight and thrust budget
 
 | Component | Mass (g) |

@@ -1,0 +1,303 @@
+%YAML:1.0 # need to specify the file type at the top!
+#
+# HARDWARE config: Pi camera (1280x800 mono, ~19.2 fps delivered) + ISM330DHCX.
+# Derived from ../gz_sim/estimator_config.yaml; only these differ:
+#   gravity_mag 9.81; init_max_disparity 20 and min_px_dist 15 (2x resolution);
+#   up_{msckf,slam}_sigma_px / chi2 back to OpenVINS defaults (1 / 1). The sim's
+#   4 / 5 were tuned to the sim renderer and the comment below says not to
+#   copy them -- 1 / 1 is the starting point, re-derive from real residuals.
+#   ZUPT actually enabled (zupt_max_disparity 1.0, zupt_only_at_beginning false):
+#   the sim's values disabled it twice over. On walk1 it took 4 replays with
+#   2 divergent to 6 with none, closure 0.72 % -> ~0.2 % (PROJECT.md, step 7).
+# Sensor files beside this one come straight from Kalibr (2026-09-10).
+
+verbosity: "INFO" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
+
+use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
+integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)
+use_stereo: false # if we have more than 1 camera, if we should try to track stereo constraints between pairs
+max_cameras: 1 # how many cameras we have 1 = mono, 2 = stereo, >2 = binocular (all mono tracking)
+
+# Online calibration ON, but the reason recorded here previously was wrong and
+# is worth correcting rather than deleting.
+#
+# The old note said freezing calibration took ATE from 10.1 m to 148.9 m, and
+# read that as evidence that something in the camera-IMU transform was wrong and
+# being absorbed. Re-measured on the 10 m structured flight after the chi-squared
+# gate was fixed: freezing all three gives 97.44 % drift against a 97.83-99.39 %
+# baseline -- no effect at all. The earlier 15x was a real measurement of a
+# different configuration (before the gravity fix, on a different scene), and it
+# pointed at a problem that was never there.
+#
+# So this is now a preference, not a finding. Kept ON because it costs nothing
+# here and because on HARDWARE the intrinsics and extrinsic genuinely will be
+# imperfect. In simulation there is nothing to calibrate -- the camera is an
+# exact pinhole with zero distortion -- and it shows: fx wandered from an exactly
+# correct 381.347 to 385.82 and cx from 320 to 313.7 over one flight, which is
+# the filter fitting noise. Freeze all three if a sim result ever needs to be
+# free of that.
+calib_cam_extrinsics: true # if the transform between camera and IMU should be optimized R_ItoC, p_CinI
+calib_cam_intrinsics: true # if camera intrinsics should be optimized (focal, center, distortion)
+calib_cam_timeoffset: true # if timeoffset between camera and IMU should be optimized
+calib_imu_intrinsics: false # if imu intrinsics should be calibrated (rotation and skew-scale matrix)
+calib_imu_g_sensitivity: false # if gyroscope gravity sensitivity (Tg) should be calibrated
+
+# 11 clones at the measured 15.2 Hz update rate spans 0.72 s, and the mission
+# settles 0.5-0.8 s at every waypoint -- so the whole window can collapse onto
+# stationary poses, which is the monocular degeneracy in its purest form. That
+# looked like the explanation and is not: widening the window to straddle the
+# stop (20 clones = 1.3 s, 30 = 2.0 s) gave 97.6 % and 95.6 % against a 97.8 %
+# baseline. Recorded because the arithmetic is seductive and the answer is no.
+max_clones: 11 # how many clones in the sliding window
+max_slam: 50 # number of features in our state vector
+max_slam_in_update: 25 # update can be split into sequential updates of batches, how many in a batch
+max_msckf_in_update: 40 # how many MSCKF features to use in the update
+dt_slam_delay: 1 # delay before initializing (helps with stability from bad initialization...)
+
+# Gazebo's world gravity is 9.8 exactly (gz's default; confirmed with
+# `gz sdf -p` on the world), and the stationary accelerometer measures 9.79-9.82
+# about it. EuRoC's 9.81 is a 0.01 m/s^2 model error, which sounds negligible
+# and is not: it integrates twice, so over the ~25 s of usable trajectory it is
+# 0.5 * 0.01 * 25^2 = 3.1 m of position error on its own.
+# On hardware this must become the local value for the flying site.
+gravity_mag: 9.81
+
+# GLOBAL_3D, measured. ANCHORED_MSCKF_INVERSE_DEPTH is the textbook choice for
+# distant features and was tried on the same recorded flight: it was slightly
+# WORSE (ATE 9.91 m vs 9.39 m, drift 48.1% vs 45.4%). Kept as evidence that the
+# remaining error is not feature parameterisation.
+feat_rep_msckf: "GLOBAL_3D"
+feat_rep_slam: "ANCHORED_MSCKF_INVERSE_DEPTH"
+feat_rep_aruco: "ANCHORED_MSCKF_INVERSE_DEPTH"
+
+# zero velocity update parameters we can use
+# we support either IMU-based or disparity detection.
+# ZUPT on, and the reason is initialisation as much as drift. OpenVINS sets
+#     bool wait_for_jerk = (updaterZUPT == nullptr);
+# (VioManagerHelper.cpp), so with ZUPT disabled the static initialiser insists
+# on a jerk: the newest IMU window above init_imu_thresh while the older one is
+# still below it. A quad's motors spin up gradually and no threshold separates
+# those two windows -- measured on a real takeoff, the newest window ramped
+# 0.004 -> 0.414 (rejected as too little excitation) and by the time it cleared
+# 0.5 the older window was already 1.31-1.53 (rejected as too much). It never
+# initialised, across a whole flight.
+#
+# With ZUPT enabled, wait_for_jerk is false and the initialiser takes the
+# "is_still" path instead: it initialises directly from the stationary window,
+# which is exactly the situation here -- the vehicle sits on the pad for ~55 s
+# before takeoff. ZUPT is independently the right thing for that period; it
+# stops the filter drifting while the vehicle is not moving.
+try_zupt: true
+# ZUPT is present ONLY so that the initialiser takes its stationary path:
+#     bool wait_for_jerk = (updaterZUPT == nullptr);   // VioManagerHelper.cpp
+# It must never apply an update. With this at 0 and zupt_max_disparity at 0,
+# the reject condition
+#     if (!disparity_passed && (chi2 > mult*chi2_check || vel > max_vel))
+# is always true, so the updater exists but stays inert.
+#
+# Runtime ZUPT was tried three ways and none is usable here:
+#   shipped defaults (disparity 0.5)  621-637 acceptances, every one of which
+#                                     returns early and DISCARDS the visual
+#                                     update; estimate climbed to 51 m while
+#                                     the vehicle hovered at 10 m
+#   chi2 gate only (mult 1)           still accepts: a hovering quad reads
+#                                     (0,0,9.81) exactly as at rest, so the
+#                                     inertial residual stays at 0.04-1.33
+#                                     against a 16.9 threshold
+#   disparity gate (0.01)             this overload of compute_disparity
+#                                     returns ~0.000 throughout the flight, so
+#                                     it cannot separate hover from rest at all
+#
+# It also self-reinforces: once velocity is pinned to zero the residual against
+# ZUPT's own model stays small, so it accepts forever, and
+# zupt_only_at_beginning cannot break out because its "has moved" flag is only
+# set when ZUPT FAILS.
+zupt_chi2_multipler: 0
+zupt_max_velocity: 0.1
+zupt_noise_multiplier: 10
+# 0 disables the disparity override; see zupt_chi2_multipler above.
+# HARDWARE: ZUPT was disabled twice over by the sim values. zupt_max_disparity 0
+# together with zupt_chi2_multipler 0 rejects every attempt (UpdaterZeroVelocity.cpp:241),
+# and zupt_only_at_beginning true is dead after the first propagated frame
+# (VioManager.cpp:360 sets has_moved_since_zupt unconditionally).
+# Explanations stay on their own lines: OpenCV's YAML parser reads a colon inside a
+# trailing comment after a plain value as a new key and aborts ("Incorrect indentation").
+zupt_max_disparity: 1.0 # px, EuRoC 0.5 at 752 px doubled for 1280
+# Only on the ground. A hovering quad is near zero velocity but not actually
+# stationary, and a false zero-velocity update in flight injects a hard, wrong
+# constraint. Restricting ZUPT to before the first motion keeps the
+# initialisation benefit without that risk.
+zupt_only_at_beginning: false # see the HARDWARE note above zupt_max_disparity
+
+# ==================================================================
+# ==================================================================
+
+init_window_time: 2.0 # how many seconds to collect initialization information
+# Measured from this vehicle, not inherited. Static init needs TWO conditions
+# at once: the older half of the disparity window still stationary, AND accel
+# variance above this threshold. With EuRoC's 1.5 they never coincided --
+# measured over 2 s windows on a recorded takeoff:
+#
+#     t=56-67   accel dev 0.31 -> 1.37   disparity still 0.000 (eligible)
+#               ... but below 1.5, so no jerk detected
+#     t>=67.4   accel dev 2.45 -> 4.01   jerk detectable
+#               ... but the older half is moving now, so no longer eligible
+#
+# Symptom: "[init]: failed static init: no accel jerk detected, platform moving
+# too much", repeating until the flight ended. 1.5 suits EuRoC, where a human
+# lifts the rig off a table; a quad's motors spin up gradually.
+#
+# With ZUPT enabled this threshold changes meaning: wait_for_jerk is false, so
+# BOTH windows must be BELOW it for the platform to count as still. 0.5 is
+# ~100x the measured stationary floor (0.0038-0.005 m/s^2) and still above
+# the ~0.4 of idling rotors, so initialising on the pad is permitted.
+# NOTE the floor is that low because the sim IMU is unusually quiet; real
+# airframe vibration will raise it, so re-measure this on hardware.
+init_imu_thresh: 0.5 # threshold for variance of the accelerometer to detect a "jerk" in motion
+init_max_disparity: 20.0 # px; sim used 10 at 640x400, this is 1280x800
+init_max_features: 50 # how many features to track during initialization (saves on computation)
+
+# Static initialisation. It needs a STATIONARY window with trackable features
+# before motion starts, and that was impossible until the world gained a
+# high-resolution takeoff pad: sitting on the runway at 0.215 m, each 1.95 cm
+# ground texel spanned ~35 px and the view was a smooth blur. Measured with
+# harness/count_features.py, before and after the pad:
+#
+#     ground (0.215 m)   18 corners, 4/25 cells   ->   200, 25/25
+#     altitude (15 m)   200 corners, 25/25 cells  ->   200, 25/25
+#
+# Dynamic init was tried first and does produce a trajectory, but a badly
+# estimated initial velocity sent it 1398 m off in one axis (ATE 400 m, drift
+# 101%) while altitude stayed sane -- the signature of a bad initial state
+# rather than accumulated drift. Static init is far more reliable when the
+# vehicle genuinely starts at rest, which this one does.
+init_dyn_use: false # if dynamic initialization should be used
+init_dyn_mle_opt_calib: false # if we should optimize calibration during intialization (not recommended)
+init_dyn_mle_max_iter: 50 # how many iterations the MLE refinement should use (zero to skip the MLE)
+init_dyn_mle_max_time: 0.05 # how many seconds the MLE should be completed in
+init_dyn_mle_max_threads: 6 # how many threads the MLE should use
+init_dyn_num_pose: 6 # number of poses to use within our window time (evenly spaced)
+init_dyn_min_deg: 10.0 # orientation change needed to try to init
+
+init_dyn_inflation_ori: 10 # what to inflate the recovered q_GtoI covariance by
+init_dyn_inflation_vel: 100 # what to inflate the recovered v_IinG covariance by
+init_dyn_inflation_bg: 10 # what to inflate the recovered bias_g covariance by
+init_dyn_inflation_ba: 100 # what to inflate the recovered bias_a covariance by
+init_dyn_min_rec_cond: 1e-12 # reciprocal condition number thresh for info inversion
+
+init_dyn_bias_g: [ 0.0, 0.0, 0.0 ] # initial gyroscope bias guess
+init_dyn_bias_a: [ 0.0, 0.0, 0.0 ] # initial accelerometer bias guess
+
+# ==================================================================
+# ==================================================================
+
+record_timing_information: false # if we want to record timing information of the method
+record_timing_filepath: "/tmp/traj_timing.txt" # https://docs.openvins.com/eval-timing.html#eval-ov-timing-flame
+
+# if we want to save the simulation state and its diagional covariance
+# use this with rosrun ov_eval error_simulation
+save_total_state: true
+filepath_est: "/tmp/ov_estimate.txt"
+filepath_std: "/tmp/ov_estimate_std.txt"
+filepath_gt: "/tmp/ov_groundtruth.txt"
+
+# ==================================================================
+# ==================================================================
+
+# our front-end feature tracking parameters
+# we have a KLT and descriptor based (KLT is better implemented...)
+use_klt: true # if true we will use KLT, otherwise use a ORB descriptor + robust matching
+# 200, and MORE IS WORSE: 400 points with max_slam 75, on the same recorded
+# flight and with the gate already opened, took drift from 16.0 % to 102.2 %.
+# The extra features are the marginal ones, and a loosened gate admits them.
+num_pts: 200 # number of points (per camera) we will extract and try to track
+fast_threshold: 20 # threshold for fast extraction (warning: lower threshs can be expensive)
+grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking)
+grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
+min_px_dist: 15 # px; scaled up for 1280x800
+knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
+# 21 against a 30.3 Hz camera means OpenVINS keeps every SECOND frame -- the
+# effective tracking rate is 15.2 Hz, measured, not 21. Keeping every frame
+# (31.0) halves inter-frame motion to ~7.4 px and was tried for exactly that
+# reason: it did not help (16.3 % against 16.0 %), and at sigma_px 2 it was much
+# worse (63.3 %). Left at 21 because it is cheaper and no worse.
+track_frequency: 21.0 # frequency we will perform feature tracking at (in frames per second / hertz)
+downsample_cameras: false # will downsample image in half if true
+num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads
+histogram_method: "HISTOGRAM" # NONE, HISTOGRAM, CLAHE
+
+# aruco tag tracker for the system
+# DICT_6X6_1000 from https://chev.me/arucogen/
+use_aruco: false
+num_aruco: 1024
+downsize_aruco: true
+
+# ==================================================================
+# ==================================================================
+
+# Camera measurement noise and outlier gate. These two lines were worth 97.8 %
+# drift, and finding that out took measuring what the filter actually did with
+# its features rather than what it produced.
+#
+# WHAT WAS HAPPENING. With sigma_px 1 and chi2_multipler 1, the number of MSCKF
+# features used per update went to ZERO 17 s into the flight -- 695 of the
+# remaining 709 updates used no features at all -- and stayed there for the last
+# 47 s. The filter was dead-reckoning on the IMU with an accelerometer bias of
+# -0.47 m/s^2 that it had absorbed at the first corner, which is 30-50x the
+# sim IMU's measured bias wander (0.009-0.014 m/s^2). An independent KLT tracker
+# on the same images found 387 trackable features throughout that period, so
+# the imagery was fine and the filter was refusing it.
+#
+# That is what a too-tight gate does. Once a state becomes slightly
+# inconsistent, every residual looks like an outlier, every feature is rejected,
+# no update can correct the state, and the inconsistency becomes PERMANENT. The
+# failure is self-locking, which is why it looked like a sudden divergence at
+# the first turn rather than the gradual drift it was mistaken for.
+#
+# WHY 1 px WAS WRONG HERE. sigma_px is how well a feature's reprojection is
+# expected to match. OpenVINS ships 1 for EuRoC, where a handheld rig moves
+# slowly over real texture. This vehicle crosses ~15 px of image between tracked
+# frames (30.3 Hz camera, track_frequency 21 keeps every second frame = 15.2 Hz
+# measured; 5.8 m/s at 10 m over a 2.6 cm/px ground sample distance), and KLT
+# error grows with displacement. 1 px was not conservative, it was wrong.
+#
+# Measured on one recorded flight, replayed (drift, % of distance travelled):
+#
+#     sigma 1, chi2 1    97.8 / 98.0 / 99.4      <- the shipped values
+#     sigma 2, chi2 1    95.6                    <- noise alone fixes nothing
+#     sigma 1, chi2 5    25.3                    <- the gate is the dominant term
+#     sigma 2, chi2 5    21.0
+#     sigma 3, chi2 5    18.3
+#     sigma 4, chi2 5    16.0                    <- kept
+#     sigma 5, chi2 5    16.4
+#     sigma 8, chi2 5    16.6
+#
+# Zero-feature updates over the last 47 s fell from 695/709 to 237/709, and ATE
+# from 237 m to 2.49 m. The gate is what matters; sigma_px refines it. Raising
+# sigma_px is the more honest half of the fix, because unlike the multiplier it
+# also correctly reduces how hard each admitted measurement pulls the state.
+#
+# ON HARDWARE these must be re-derived, not copied. The right sigma_px is a
+# property of the tracker's actual reprojection scatter at the flight's speed
+# and altitude; a real camera with motion blur and rolling-shutter-free but
+# noisy imagery will want its own value. What transfers is the METHOD: count
+# the features the filter actually uses per update, and if that number goes to
+# zero while the images are still trackable, the gate is the problem.
+up_msckf_sigma_px: 1
+up_msckf_chi2_multipler: 1
+up_slam_sigma_px: 1
+up_slam_chi2_multipler: 1
+up_aruco_sigma_px: 1
+up_aruco_chi2_multipler: 1
+
+# masks for our images
+use_mask: false
+
+# imu and camera spacial-temporal
+# imu config should also have the correct noise values
+relative_config_imu: "kalibr_imu_chain.yaml"
+relative_config_imucam: "kalibr_imucam_chain.yaml"
+
+
+
+

@@ -6,7 +6,7 @@ Description=VIO flight session for %i (harness/vio_flight.py)
 
 [Service]
 Environment=SUDO_USER=%i
-ExecStart=/usr/bin/python3 -u /home/%i/harness/vio_flight.py
+ExecStart=/usr/bin/python3 -u /home/%i/harness/vio_flight.py --exposure-sweep
 # SIGTERM to vio_flight.py alone: it passes it to vio_live.py, which stops the
 # camera and lets vio_live close the recording. Anything left is killed only if
 # that overruns TimeoutStopSec (vio_flight.py itself gives it 80 s).
