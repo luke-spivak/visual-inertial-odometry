@@ -21,8 +21,8 @@ Onboard camera footage showing the visual features OpenVINS tracks to estimate t
 
 ## Results
 
-- Real flight: Completed an autonomous takeoff, position hold, and landing using VIO for both horizontal positioning and altitude.
-- Simulation: Completed drone missions without GPS using vision-based navigation.
+- **Real flight**: Completed an autonomous takeoff, position hold, and landing using VIO for both horizontal positioning and altitude.
+- **Simulation**: Completed drone missions without GPS using vision-based navigation.
 
 ## Repository structure
 
