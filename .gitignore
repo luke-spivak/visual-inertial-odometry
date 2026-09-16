@@ -7,13 +7,14 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+.venv-video
 
 # colcon / ROS 2 build artifacts
 build/
 install/
 log/
 
-# Datasets and recorded runs — large, and reproducible via harness/
+# Datasets and recorded runs
 datasets/
 *.bag
 *.db3
