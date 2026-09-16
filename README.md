@@ -22,10 +22,7 @@ All motion estimation runs onboard.
 | [docs/](docs/) | Setup, hardware specifications, development history, and archived plans |
 | [results/](results/) | Recorded measurements, plots, and experiment reports |
 
-The live path is `src/vio_flight.py` → `src/vio_live.py` →
-`src/openvins_runner/vio_live.cpp`, with `src/vio_mavlink.py` sending the resulting
-poses to ArduPilot. `src/imu_log.py` also provides the sensor setup used at runtime.
-Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
+TThe onboard software runs without ROS; simulation uses ROS 2 and Gazebo.
 
 ## Run and test
 
@@ -41,25 +38,5 @@ python -m pip install -r tools/requirements-test.txt
 python -m pytest -q src tools/test_render_tracking.py sim/ros2/vio_bridge/test
 ```
 
-Common workflows, after setting up the corresponding environment:
-
-```sh
-# Build and deploy the live software to the Pi (uses SSH; changes the Pi).
-PI=viopi bash tools/build_vio.sh
-
-# Run a recorded simulation in the configured Linux/ROS environment.
-WORLD=iris_field_vio.sdf RECORD_SENSORS=1 bash sim/run_sim_vio.sh example
-bash tools/analyze_run.sh ~/vio_runs/simvio_example
-
-# Score a retained handheld estimate without hardware or ROS.
-python tools/vio_closure.py results/vio_walk3_2026-09-10-live-estimate.txt
-```
-
-Simulation configuration is in `sim/config/`; hardware configuration is in
-`src/config/`. The latter is specific to the calibrated sensor assembly.
-Mission plans are in `src/missions/`. Historical flight-controller parameters
-are in `results/config-snapshots/`, not a current recommended configuration.
-
-Large datasets and local environments stay outside the tracked source tree.
-Historical experiment records may refer to paths used before the directory
-reorganization; the commands above and the setup guide use the current layout.
+See the [setup and deployment guide](docs/setup.md) for Raspberry Pi deployment,
+simulation, replay, and configuration details.
