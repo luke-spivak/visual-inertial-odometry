@@ -1,13 +1,7 @@
 # Visual-Inertial Odometry Quadcopter
 
-A Raspberry Pi 5 runs monocular visual-inertial odometry on a 5-inch quadcopter,
-using an OV9281 global-shutter camera and ISM330DHCX IMU. OpenVINS estimates
-motion; a Python MAVLink bridge feeds the estimate into ArduPilot.
-
-The project covers sensor synchronization, camera–IMU calibration, embedded
-integration, simulation, and flight evaluation. OpenVINS supplies the estimator;
-this repository contains the integration, configuration, diagnostics, and
-evaluation tools.
+I built the hardware and software integration needed to run OpenVINS onboard a small quadcopter. The work included synchronizing the sensors, calibrating their alignment, running the estimator on a Raspberry Pi, and translating its output into movement estimates ArduPilot can use.
+I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
 
 ## Results and current status
 
