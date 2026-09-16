@@ -787,6 +787,53 @@ September 15 altitude/fusion findings. See
 References: [AUTO mode](https://ardupilot.org/copter/docs/auto-mode.html),
 [home and EKF origin](https://ardupilot.org/dev/docs/mavlink-get-set-home-and-origin.html).
 
+### Full AUTO mission on VIO, chi² gate 5 (2026-09-16)
+
+`log_24_2026-9-16-18-20-26.bin`, `run-20260916-181014`. Best VIO flight so far:
+takeoff, 34 s loiter and land, all on source set 2 (horizontal position and
+velocity and vertical velocity from VIO, height from baro, yaw from compass,
+`EK3_SRC_OPTIONS` 0). GPS set the origin at boot and was logged, nothing more.
+The mission landed and disarmed itself. Exposure sweep chose 200 µs (0.47 %
+clipped, mean 103); 0 dropped frames, 8 ms updates, 16–19 ms lag.
+
+**The change: `up_msckf_chi2_multipler` and `up_slam_chi2_multipler` 1 → 5.**
+`sigma_px` stays 1 until it is measured on hardware. Earlier loiters froze for
+10–15 s and then ran away (flight 18: 52 m; 17:22 today: 8–10 m twice). In the
+freeze GPS showed the aircraft moving 5–12 m while VIO reported under 1 m.
+Tracking was fine (~180 features, 3–6 px/frame) and ZUPT almost never fired.
+Flight 18's instrumented replay (`results/flight18-diagnosis/`) accepted
+**0 features for 3–9 s of the loiter** out of 100–226 offered. The filter was
+running on the IMU alone until the error was too large to pass the gate, then
+took corrections in bursts. The same recording with gate 5 followed GPS
+(13.5 m vs 13.5 m at 12 s) with no freeze or runaway. That matches the sim,
+where gate 1 → 5 was the dominant term (98 % → 25 % drift). Caveat: the
+accepted-feature counts come from flight 18 only, which may have been an
+overexposed run.
+
+**Loiter, displacement from start:**
+
+| s | VIO | GPS |
+|---|---|---|
+| 3 | 0.5 m | 1.1 m |
+| 12 | 0.5 m | 3.0 m |
+| 21 | 0.6 m | 3.1 m |
+| 30 | 0.6 m | 2.5 m |
+| 39 | 0.6 m | 2.4 m |
+
+The aircraft visibly held within 1 m the whole loiter, so the GPS wander was GPS
+noise and VIO was closer to the truth. The Pi's last status line (162 s) read
+0.48 m closure over 19.3 m of path; this is self-reported and has no ground
+truth yet.
+
+**Not yet shown:** that gate 5 is what fixed the loiter. The loiters that held
+on Sept 15 17:34 and 16:45 today looked the same (VIO ≈ 0, GPS 2–3 m), and the
+air may simply have been calm. A windy loiter, or a replay counting accepted
+features on this recording, separates the two. The drift number still needs a
+tape-measured landing offset.
+
+**Post-flight, expected:** `EKF variance: position lost` 70 s after landing,
+once VIO was stopped while source set 2 was still selected.
+
 ### Weight and thrust budget
 
 | Component | Mass (g) |
