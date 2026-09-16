@@ -77,16 +77,21 @@ def signature(paths, options):
                   for k, p in paths.items() if p.exists()}}, sort_keys=True).encode()).hexdigest()
 
 
-def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False):
+def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False, gamma=1.0, age_dots=False):
     import cv2
     import numpy as np
     import imageio_ffmpeg
     if not math.isfinite(fps) or not 1 <= fps <= 120:
         raise ValueError('FPS must be between 1 and 120')
+    if not math.isfinite(gamma) or gamma <= 0:
+        raise ValueError('Gamma must be positive and finite')
+    lut = np.round(255 * (np.arange(256) / 255.0) ** (1 / gamma)).astype(np.uint8)
     paths, stamps, tracks, w, h, warnings, ending = inspect(prefix, width, height)
-    output = Path(str(prefix) + '.tracking.mp4')
-    summary_path = Path(str(prefix) + '.tracking-summary.json')
-    sig = signature(paths, [width, height, fps, rotate180])
+    suffix = '.tracking' if gamma == 1 else '.tracking-bright'
+    if age_dots: suffix = '.tracking-age-dots'
+    output = Path(str(prefix) + suffix + '.mp4')
+    summary_path = Path(str(prefix) + suffix + '-summary.json')
+    sig = signature(paths, [width, height, fps, rotate180, gamma, age_dots])
     if not force and output.exists() and summary_path.exists():
         previous = json.loads(summary_path.read_text())
         if previous.get('signature') == sig and previous.get('output_bytes') == output.stat().st_size:
@@ -94,12 +99,25 @@ def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False)
     raw = np.memmap(paths['raw'], mode='r', dtype=np.uint8)
     period = int(np.median(np.diff(stamps))) if len(stamps) > 1 else round(1e9 / fps)
     duration = (stamps[-1] - stamps[0] + period) / 1e9
-    tmp = Path(str(prefix) + '.tracking.partial.mp4')
+    tmp = Path(str(prefix) + suffix + '.partial.mp4')
     proc = subprocess.Popen([imageio_ffmpeg.get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-y',
         '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps), '-i', '-',
         '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-crf', '20',
         '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(tmp)], stdin=subprocess.PIPE)
     history, cached, last_i = {}, None, -1
+    # Track age uses capture timestamps, independent of output resampling.
+    born = {}
+    if age_dots:
+        previous = set()
+        for j in range(len(stamps)):
+            features = tracks.get(j, {}).get('features', [])
+            if j and stamps[j] - stamps[j-1] > period * 1.5:
+                previous = set()
+            births = {}
+            for fid, _, _ in features:
+                births[fid] = born[j-1][fid] if fid in previous else stamps[j]
+            born[j] = births
+            previous = set(births)
     i, frames_out = 0, math.ceil(duration * fps)
     try:
         for k in range(frames_out):
@@ -113,13 +131,18 @@ def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False)
                 image = raw[start:start + w * h * 2].reshape(h, w, 2)
                 if image[:, :, 0].any():
                     raise ValueError('Not the expected high-byte R8 image layout')
-                cached = cv2.cvtColor(image[:, :, 1].copy(), cv2.COLOR_GRAY2BGR)
+                cached = cv2.cvtColor(cv2.LUT(image[:, :, 1].copy(), lut), cv2.COLOR_GRAY2BGR)
                 row = tracks.get(i)
                 if row is None:
                     history.clear()
                 else:
                     current = {}
                     for fid, x, y in row['features']:
+                        if age_dots:
+                            age = (stamps[i] - born[i][fid]) / 1e9
+                            color = (0, 230, round(255 * (1 - min(age / 2.0, 1))))
+                            cv2.circle(cached, (round(x), round(y)), 2, color, -1, cv2.LINE_AA)
+                            continue
                         pts = (history.get(fid, []) + [(round(x), round(y))])[-12:]
                         current[fid] = pts
                         color = (80 + fid * 37 % 176, 80 + fid * 67 % 176, 80 + fid * 97 % 176)
@@ -141,7 +164,8 @@ def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False)
                 frame = cv2.rotate(frame, cv2.ROTATE_180)
             cv2.rectangle(frame, (0, 0), (w, min(h, 55)), (0, 0, 0), -1)
             cv2.putText(frame, f'{k/fps:.2f}s | {label}', (8, 22), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1)
-            cv2.putText(frame, f'capture_ns={stamps[i]} frame={i}', (8, 44), cv2.FONT_HERSHEY_SIMPLEX, .45, (200, 200, 200), 1)
+            detail = 'Track age: yellow = new | green = 2+ seconds' if age_dots else f'capture_ns={stamps[i]} frame={i}'
+            cv2.putText(frame, detail, (8, 44), cv2.FONT_HERSHEY_SIMPLEX, .45, (200, 200, 200), 1)
             proc.stdin.write(frame.tobytes())
         proc.stdin.close()
         if proc.wait() != 0: raise RuntimeError('FFmpeg encoding failed')
@@ -149,6 +173,8 @@ def render(prefix, width=1280, height=800, fps=20, force=False, rotate180=False)
     except BaseException:
         proc.kill(); proc.wait(); tmp.unlink(missing_ok=True); raise
     result = {'signature': sig, 'output_bytes': output.stat().st_size,
+              'display_gamma': gamma,
+              'overlay_style': 'age_dots' if age_dots else 'trails',
               'rotation_degrees': 180 if rotate180 else 0,
               'camera_frames': len(stamps), 'frames_with_observations': len(tracks),
               'frames_without_observations': len(stamps) - len(tracks),
@@ -167,5 +193,7 @@ if __name__ == '__main__':
     p.add_argument('--height', type=int, default=800); p.add_argument('--fps', type=float, default=20)
     p.add_argument('--force', action='store_true')
     p.add_argument('--rotate180', action='store_true', help='Rotate imagery and tracks upright, keeping labels readable')
+    p.add_argument('--gamma', type=float, default=1.0, help='Display correction; values above 1 brighten raw imagery before overlays')
+    p.add_argument('--age-dots', action='store_true', help='Small dots, yellow to green over two seconds of continuous tracking')
     a = p.parse_args()
-    render(a.prefix, a.width, a.height, a.fps, a.force, a.rotate180)
+    render(a.prefix, a.width, a.height, a.fps, a.force, a.rotate180, a.gamma, a.age_dots)

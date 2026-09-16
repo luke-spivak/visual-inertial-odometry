@@ -62,7 +62,7 @@ def ae_probe(max_shutter, fixed_shutter=None, fixed_gain=None):
 
 
 def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000)):
-    """Choose the shortest fixed exposure whose raw frames are not clipped."""
+    """Choose the brightest fixed exposure below the clipping limit."""
     results = []
     for shutter in candidates:
         path = f"/tmp/exposure-sweep-{shutter}.y16"
