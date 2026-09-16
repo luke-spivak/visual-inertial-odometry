@@ -21,8 +21,8 @@ their inputs. `tools/render_tracking.py` uses FFmpeg supplied by imageio-ffmpeg.
 The feature logger also has a standalone C++17 test:
 
 ```sh
-c++ -std=c++17 -pthread -I src/vio_live \
-  src/vio_live/test_feature_log.cpp -o /tmp/vio-feature-log-test
+c++ -std=c++17 -pthread -I src/openvins_runner \
+  src/openvins_runner/test_feature_log.cpp -o /tmp/vio-feature-log-test
 /tmp/vio-feature-log-test /tmp/vio-feature-log-test.jsonl
 ```
 

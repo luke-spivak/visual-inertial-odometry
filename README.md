@@ -40,7 +40,7 @@ observations, not independently measured navigation accuracy.
 | [results/](results/) | Recorded measurements, plots, and experiment reports |
 
 The live path is `src/vio_flight.py` → `src/vio_live.py` →
-`src/vio_live/vio_live.cpp`, with `src/vio_mavlink.py` sending the resulting
+`src/openvins_runner/vio_live.cpp`, with `src/vio_mavlink.py` sending the resulting
 poses to ArduPilot. `src/imu_log.py` also provides the sensor setup used at runtime.
 Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
 

@@ -104,7 +104,7 @@ requires measured offsets/markers and is not implemented here.
 python -m unittest discover -s harness -p test_render_tracking.py -v
 ```
 
-The standalone C++ test `src/vio_live/test_feature_log.cpp` runs in Linux
+The standalone C++ test `src/openvins_runner/test_feature_log.cpp` runs in Linux
 (the existing build container), including `/dev/full` write-failure handling.
 
 Before a flight with the new binary, do a props-off recorded camera movement:

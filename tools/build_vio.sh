@@ -40,14 +40,14 @@ cmake -S \$B/open_vins/ov_msckf -B \$B/ov -G Ninja -DCMAKE_BUILD_TYPE=Release \
 # -j4, not more: at -j6 in Docker's 8 GB the OOM killer took a cc1plus
 # (Eigen/Ceres translation units run ~1.5 GB each) and the build just stopped.
 ninja -C \$B/ov -j4 ov_msckf_lib
-cmake -S src/vio_live -B \$B/live -G Ninja -DCMAKE_BUILD_TYPE=Release \
+cmake -S src/openvins_runner -B \$B/openvins_runner -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DOV_SRC=/work/\$B/open_vins -DOV_LIB=/work/\$B/ov/libov_msckf_lib.so -DCMAKE_CXX_FLAGS=\"\$FLAGS\" \
-      -DCMAKE_EXE_LINKER_FLAGS=\"-Wl,--as-needed -Wl,--disable-new-dtags\" > \$B/live-configure.log
-ninja -C \$B/live
+      -DCMAKE_EXE_LINKER_FLAGS=\"-Wl,--as-needed -Wl,--disable-new-dtags\" > \$B/openvins_runner-configure.log
+ninja -C \$B/openvins_runner
 rm -rf \$B/bundle \$B/deps && mkdir -p \$B/bundle/lib \$B/deps
-cp \$B/live/vio_live \$B/bundle/
+cp \$B/openvins_runner/vio_live \$B/bundle/
 cp \$B/ov/libov_msckf_lib.so \$B/bundle/lib/
-LD_LIBRARY_PATH=\$B/bundle/lib ldd \$B/live/vio_live | awk '/=> \\// {print \$3}' | while read -r f; do cp -L \"\$f\" \$B/deps/; done
+LD_LIBRARY_PATH=\$B/bundle/lib ldd \$B/openvins_runner/vio_live | awk '/=> \\// {print \$3}' | while read -r f; do cp -L \"\$f\" \$B/deps/; done
 "
 
 # Ship only what the Pi lacks.
