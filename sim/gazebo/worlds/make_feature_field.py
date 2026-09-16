@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""
+Generate a field of 3D obstacles for the VIO sim world.
+
+Why this exists: the runway world is a textured PLANE. Every feature OpenVINS
+tracks then lies at z=0, and a monocular filter observing a single plane is a
+known degeneracy -- depth is poorly conditioned and structure/motion trade off
+against each other. Tuning against that scene would mean designing around a
+failure mode the real flight does not have (and missing the ones it does).
+
+So scene structure becomes an experiment variable, not a fixed backdrop:
+regenerate with different --count / --min-height / --max-height and the same
+mission to measure how drift responds to how much 3D the scene actually has.
+
+    python3 make_feature_field.py --out ../models/vio_feature_field/model.sdf
+
+Two things are deliberate and easy to get wrong:
+
+* The camera is mono8. Hue is invisible to it -- two objects with different
+  colours but equal luminance are the same grey, and the tracker sees no edge
+  between them. So the albedo that varies here is LIGHTNESS; the tint is
+  cosmetic, for when a human looks at the scene in the GUI.
+
+* Heights spread over a range rather than clustering. At the mission's 10 m
+  altitude a 0.4-6.0 m spread puts features 4.0-9.6 m below the camera, a
+  2.4:1 depth ratio. Uniform-height boxes would be a plane again, just a
+  higher one.
+"""
+import argparse
+import math
+import random
+
+
+def rgb(lightness, tint_hue, tint=0.18):
+    """Grey at `lightness`, nudged toward a hue. Luminance stays ~lightness so
+    the mono8 camera sees the lightness spread and nothing else."""
+    r = lightness * (1.0 + tint * math.cos(tint_hue))
+    g = lightness * (1.0 + tint * math.cos(tint_hue - 2.094))
+    b = lightness * (1.0 + tint * math.cos(tint_hue + 2.094))
+    return tuple(min(1.0, max(0.0, c)) for c in (r, g, b))
+
+
+def seg_dist(px, py, ax, ay, bx, by):
+    """Distance from (px,py) to segment (ax,ay)-(bx,by)."""
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def parse_corridor(spec):
+    """"x,y;x,y;..." -> [(x, y), ...]"""
+    if not spec:
+        return []
+    pts = []
+    for part in spec.split(";"):
+        xs, ys = part.split(",")
+        pts.append((float(xs), float(ys)))
+    return pts
+
+
+def shape_xml(kind, dims):
+    if kind == "box":
+        return f"<box><size>{dims[0]:.3f} {dims[1]:.3f} {dims[2]:.3f}</size></box>"
+    if kind == "cylinder":
+        return (f"<cylinder><radius>{dims[0]:.3f}</radius>"
+                f"<length>{dims[2]:.3f}</length></cylinder>")
+    return f"<sphere><radius>{dims[0]:.3f}</radius></sphere>"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--count", type=int, default=160)
+    ap.add_argument("--extent", type=float, default=30.0,
+                    help="half-width of the field, metres")
+    ap.add_argument("--clear-radius", type=float, default=6.0,
+                    help="keep-out around the origin so takeoff/landing is free")
+    ap.add_argument("--min-height", type=float, default=0.4)
+    ap.add_argument("--max-height", type=float, default=6.0)
+    # Flight corridor. The obstacles carry collision geometry, so a mission
+    # flown below the tallest of them flies INTO them -- at 10 m that never
+    # came up, at 4 m there are objects up to 5.3 m within 1 m of every leg.
+    # Objects inside the corridor are SHORTENED rather than removed: the
+    # vehicle needs features directly beneath it, and deleting them would
+    # thin the scene exactly where the camera looks. Everything outside keeps
+    # its full height, which is where the depth diversity comes from -- at
+    # 4 m and 118 deg HFOV the swath is 13 m wide, so 6 m objects a few metres
+    # off the path are still well inside the frame.
+    ap.add_argument("--corridor", default="",
+                    help='flight path as "x,y;x,y;..."; objects near it are '
+                         "capped to --corridor-max-top")
+    ap.add_argument("--corridor-halfwidth", type=float, default=3.0,
+                    help="metres either side of the path to cap")
+    ap.add_argument("--corridor-max-top", type=float, default=2.0,
+                    help="tallest object top allowed inside the corridor")
+    ap.add_argument("--out", default="-")
+    a = ap.parse_args()
+
+    corridor = parse_corridor(a.corridor)
+    capped = 0
+
+    rnd = random.Random(a.seed)
+    parts, placed = [], []
+
+    tries = 0
+    while len(placed) < a.count and tries < a.count * 200:
+        tries += 1
+        x = rnd.uniform(-a.extent, a.extent)
+        y = rnd.uniform(-a.extent, a.extent)
+        if math.hypot(x, y) < a.clear_radius:
+            continue
+
+        h = rnd.uniform(a.min_height, a.max_height)
+        kind = rnd.choices(["box", "cylinder", "sphere"], weights=[7, 2, 1])[0]
+        if kind == "box":
+            dims = (rnd.uniform(0.8, 3.5), rnd.uniform(0.8, 3.5), h)
+        elif kind == "cylinder":
+            dims = (rnd.uniform(0.4, 1.6), 0, h)
+        else:
+            h = rnd.uniform(0.5, 2.0)
+            dims = (h, 0, 0)
+
+        # Footprint radius, used both for spacing and so nothing straddles the
+        # takeoff keep-out.
+        rad = max(dims[0], dims[1]) * 0.75 if kind != "sphere" else dims[0]
+        if math.hypot(x, y) - rad < a.clear_radius:
+            continue
+        if any(math.hypot(x - px, y - py) < rad + pr + 0.5
+               for px, py, pr in placed):
+            continue
+        placed.append((x, y, rad))
+
+        # Cap AFTER placement and after `placed` records the full-size
+        # footprint, so adding a corridor cannot change which objects get
+        # placed or where. Only their height changes; the 10 m scene stays
+        # comparable.
+        if corridor:
+            near = min((seg_dist(x, y, corridor[i][0], corridor[i][1],
+                                 corridor[i + 1][0], corridor[i + 1][1])
+                        for i in range(len(corridor) - 1)), default=1e9)
+            # Conservative radius for the clearance test: the packing radius
+            # above is 0.75*max(side), which understates an elongated box's
+            # reach along its diagonal. Getting this wrong leaves a tall object
+            # closer to the path than the corridor claims.
+            crad = (math.hypot(dims[0], dims[1]) / 2.0
+                    if kind == "box" else rad)
+            if near - crad < a.corridor_halfwidth:
+                if kind == "sphere":
+                    # top = 2r, and radius is the footprint, so a capped
+                    # sphere is smaller in plan too. Only a handful of them.
+                    if 2.0 * dims[0] > a.corridor_max_top:
+                        dims = (a.corridor_max_top / 2.0, 0, 0)
+                        capped += 1
+                elif h > a.corridor_max_top:
+                    h = a.corridor_max_top
+                    dims = (dims[0], dims[1], h)
+                    capped += 1
+
+        z = dims[0] if kind == "sphere" else h / 2.0
+        yaw = rnd.uniform(0, math.pi)
+        cr, cg, cb = rgb(rnd.uniform(0.12, 0.92), rnd.uniform(0, 2 * math.pi))
+        geom = shape_xml(kind, dims)
+        i = len(placed)
+        parts.append(f"""      <collision name="c{i}">
+        <pose>{x:.3f} {y:.3f} {z:.3f} 0 0 {yaw:.4f}</pose>
+        <geometry>{geom}</geometry>
+      </collision>
+      <visual name="v{i}">
+        <pose>{x:.3f} {y:.3f} {z:.3f} 0 0 {yaw:.4f}</pose>
+        <geometry>{geom}</geometry>
+        <material>
+          <ambient>{cr:.3f} {cg:.3f} {cb:.3f} 1</ambient>
+          <diffuse>{cr:.3f} {cg:.3f} {cb:.3f} 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>""")
+
+    if len(placed) < a.count:
+        print(f"<!-- packed {len(placed)}/{a.count}; field is saturated -->")
+
+    body = "\n".join(parts)
+    sdf = f"""<?xml version="1.0" ?>
+<!-- GENERATED by sim/gazebo/worlds/make_feature_field.py; do not hand-edit.
+     seed={a.seed} count={len(placed)} extent={a.extent} clear={a.clear_radius}
+     height=[{a.min_height}, {a.max_height}]
+     corridor="{a.corridor}" halfwidth={a.corridor_halfwidth}
+     corridor_max_top={a.corridor_max_top} capped={capped} -->
+<sdf version="1.9">
+  <model name="vio_feature_field">
+    <static>true</static>
+    <link name="link">
+{body}
+    </link>
+  </model>
+</sdf>
+"""
+    if a.out == "-":
+        print(sdf)
+    else:
+        with open(a.out, "w") as f:
+            f.write(sdf)
+        print(f"wrote {len(placed)} objects ({capped} capped to "
+              f"{a.corridor_max_top} m in the corridor) -> {a.out}")
+
+
+if __name__ == "__main__":
+    main()

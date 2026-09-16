@@ -1,0 +1,20 @@
+# vio_full plus the optical flow stack. docs/development-log.md dropped the Matek 3901-L0X on
+# the grounds that its four features "compete for flash needed by external nav".
+# With external nav measured at 11 KB, that premise is worth re-testing.
+#
+# undef before define: minimize_fpv_osd.inc already sets AP_OPTICALFLOW_ENABLED 0
+# and the board's includes set MODE_FLOWHOLD_ENABLED, so a bare define lands
+# twice in hwdef.h and the build fails with -Werror redefined.
+define HAL_VISUALODOM_ENABLED 1
+define EK3_FEATURE_EXTERNAL_NAV 1
+define AP_RANGEFINDER_ENABLED 1
+define AP_RANGEFINDER_BENEWAKE_TFMINI_ENABLED 1
+define AP_RANGEFINDER_BENEWAKE_TFMINIPLUS_ENABLED 1
+undef AP_OPTICALFLOW_ENABLED
+define AP_OPTICALFLOW_ENABLED 1
+undef HAL_MSP_OPTICALFLOW_ENABLED
+define HAL_MSP_OPTICALFLOW_ENABLED 1
+undef EK3_FEATURE_OPTFLOW_FUSION
+define EK3_FEATURE_OPTFLOW_FUSION 1
+undef MODE_FLOWHOLD_ENABLED
+define MODE_FLOWHOLD_ENABLED 1

@@ -24,7 +24,7 @@ A short vertical mast bolted to the two existing tail hardpoints on the top
 plate, carrying the GPS/compass puck aft of and above everything else on the
 aircraft.
 
-**The compass is the requirement, not the GPS** ([PROJECT.md:142](PROJECT.md:142)).
+**The compass is the requirement, not the GPS** ([PROJECT.md:142](../development-log.md)).
 The SpeedyBee F405 V4 has no onboard magnetometer, and without a compass there is
 no yaw source, which locks the aircraft out of Loiter, PosHold and every auto
 mode — i.e. out of the ability to bench the thing being built. So this part exists
@@ -50,7 +50,7 @@ track  173.13 mm across (X)  ×  145.27 mm fore-aft (Y)
 ```
 
 **This is a wide-X frame, not a true X.** The camera bracket spec
-([camera-imu-bracket-spec.md:62](camera-imu-bracket-spec.md:62)) and the Pi tray
+([camera-imu-bracket-spec.md:62](camera-imu-bracket-spec.md)) and the Pi tray
 spec both assumed `radius 113.0 at ±45° → (±79.9, ±79.9)`. The radius was right;
 the angle was not.
 
@@ -97,7 +97,7 @@ The foot in §5.1 is drawn to this profile.
 ## 3. The module
 
 SEQURE M10-25Q — u-blox M10, QMC5883L, **25 × 25 × 8 mm, 12.2 g**, SH1.0-6P
-connector ([PROJECT.md:49](PROJECT.md:49) and the vendor spec).
+connector ([PROJECT.md:49](../development-log.md) and the vendor spec).
 
 **Two assumptions to check against the part in hand before printing:**
 
@@ -234,7 +234,7 @@ A 12.2 g puck on the end of a printed cantilever is a resonator. First mode,
 | 80 | 31.5 | 12.7 g | 201 Hz |
 
 Motor fundamental is ~160 Hz at the ~39 % hover throttle
-([PROJECT.md:333](PROJECT.md:333)) and reaches ~420 Hz at full throttle on 4S at
+([PROJECT.md:333](../development-log.md)) and reaches ~420 Hz at full throttle on 4S at
 1700 KV. **50 mm keeps the mast at 2.6× the hover fundamental**, which is the
 condition it spends its life in. It is only coincident with the motor order at
 full throttle, transiently.

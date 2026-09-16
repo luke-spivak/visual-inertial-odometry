@@ -32,7 +32,7 @@ is √(T/2ρA) ≈ 7.6 m/s, and the Pi is in the region feeding that. Forced
 convection at even a few m/s takes the convective coefficient from ~5–10 W/m²K to
 ~30–50. The airframe is cooling the Pi for free, and OpenVINS at ~41 ms/frame is
 already the system bottleneck, so any thermal throttling comes straight off the
-drift number. [vio-quad-build-plan.md:92](vio-quad-build-plan.md:92) defers the
+drift number. [vio-quad-build-plan.md:92](../archive/vio-quad-build-plan.md) defers the
 Active Cooler decision to logged CPU temperature; an enclosure pre-empts that
 decision in the wrong direction before the data exists.
 
@@ -42,7 +42,7 @@ fan intake.
 
 ### The threat model
 Not debris. **Inverted landing.** Development flying on this project will produce
-them: [PROJECT.md:9](PROJECT.md:9) records peak mid-flight excursions of 10–13 m
+them: [PROJECT.md:9](../development-log.md) records peak mid-flight excursions of 10–13 m
 and milestone 5 notes vision crashing the aircraft.
 
 The GPS mast already takes the first hit — its head sits **43.8 mm above the top
@@ -225,7 +225,7 @@ middle-to-top standoffs are ever changed, re-check this row before flying.
 | Fan max / min | 30% / 20% |
 | **Bridge fan** | **100%** — for the §5.3 straps |
 | Nozzle | 250 °C |
-| Bed | **70 °C, textured PEI** — no glue stick ([PROJECT.md:44](PROJECT.md:44)) |
+| Bed | **70 °C, textured PEI** — no glue stick ([PROJECT.md:44](../development-log.md)) |
 | X-Y hole compensation | **0** |
 | Elephant foot compensation | 0.15 mm |
 | **Brim** | **5 mm** — §7.1 |
@@ -325,6 +325,6 @@ them, and they can fold fore-and-aft independently. Take it only if the mass
 budget forces it.
 
 Running total for printed parts, now seven: **~112 g** against the ~35 g at
-[PROJECT.md:341](PROJECT.md:341). AUW ~737 g, hover throttle **40.9 %** — still
+[PROJECT.md:341](../development-log.md). AUW ~737 g, hover throttle **40.9 %** — still
 inside the 40–50 % target band, but this is the part to delete first if that
 number needs to come down.

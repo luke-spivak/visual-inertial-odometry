@@ -1,0 +1,6 @@
+# Standalone Python tests, including tracking-video rendering.
+pytest
+numpy
+scipy
+opencv-python
+imageio-ffmpeg

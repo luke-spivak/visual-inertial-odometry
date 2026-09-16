@@ -1,5 +1,5 @@
 #define main unused_live_main
-#include "../../harness/vio_live/vio_live.cpp"
+#include "../../src/vio_live/vio_live.cpp"
 #undef main
 
 class DiagnosticVio : public LoggedVioManager {

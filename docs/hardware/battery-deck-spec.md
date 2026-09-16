@@ -64,7 +64,7 @@ for CG hangs ~37 mm beyond the plate, which is the entire reason this part exist
 | `PACK_H` | **33.0 mm** | Measured — square section with `PACK_W` |
 | `PACK_L` | **71.0 mm** | Measured |
 | `PACK_W` | **33.0 mm** | Measured |
-| `PACK_M` | 180 g | [PROJECT.md:291](PROJECT.md:291) |
+| `PACK_M` | 180 g | [PROJECT.md:291](../development-log.md) |
 | `PACK_Y` | **−20.0 mm** | Pack centre. Derived in §8 |
 | `FLOOR_T` | **3.0 mm** | Set by the clearance budget below |
 | `WALL_T` | 3.0 mm | |
@@ -338,7 +338,7 @@ Running total for printed parts across all three specs:
 | GPS mast (not yet specced) | ~4 g |
 | **Total** | **~71 g** |
 
-against the **~35 g** allowed at [PROJECT.md:289](PROJECT.md:289). That line was
+against the **~35 g** allowed at [PROJECT.md:289](../development-log.md). That line was
 written before any of these parts existed and should be revised to ~70 g.
 
 The consequence is small: AUW goes from ~660 to ~695 g, and hover throttle from

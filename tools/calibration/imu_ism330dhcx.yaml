@@ -1,0 +1,26 @@
+# Kalibr IMU description: ISM330DHCX on the camera-IMU bracket.
+#
+# Noise from the 2026-09-09 Allan run (docs/development-log.md, "Allan variance: the
+# numbers"), worst axis of three, inflated x5. A bench Allan run contains no
+# vibration and no thermal transient, and handheld calibration motion is not a
+# bench; Kalibr's own guidance is to inflate. The raw measured values are kept
+# in the comments so the inflation stays visible and reversible.
+rostopic: /imu0
+update_rate: 440.0    # delivered rate. The ODR is nominally 416 Hz; the part runs at
+                      # 439.57 Hz, confirmed by two independent methods (docs/development-log.md)
+accelerometer_noise_density: 2.684e-03   # measured 5.368e-04 x5  [m/s^2/sqrt(Hz)]
+accelerometer_random_walk:   2.341e-04   # measured 4.683e-05 x5  [m/s^3/sqrt(Hz)]
+gyroscope_noise_density:     5.205e-04   # measured 1.041e-04 x5  [rad/s/sqrt(Hz)]
+gyroscope_random_walk:       8.745e-06   # measured 1.749e-06 x5  [rad/s^2/sqrt(Hz)]
+
+# Expected extrinsic, from camera-imu-bracket-spec.md section 4.4: IMU silkscreen
+# +X -> plate +u, +Y -> plate +v (up), +Z out of the back face, anti-parallel
+# to the optical axis. With the camera upright (image up = plate +v) that makes
+# R_cam_imu = diag(1, -1, -1): 180 deg about the camera's x axis; about its y
+# axis instead if the camera was mounted inverted. Translation ~1 cm, mostly
+# along the optical axis. Any residual beyond a degree or two off a 90-degree
+# multiple means the mount or the convention is wrong.
+# MEASURED 2026-09-10: identity + 2.2 deg, not the prediction above -- the
+# driver's reported axes are aligned with the camera. Use Kalibr's T_cam_imu.
+# RE-MEASURED 2026-09-12, IMU re-oriented: 180 deg about the camera's y axis
+# + 4.4 deg (results/kalibr_imucam_2026-09-12-*).

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Run from the Mac while the aircraft is disarmed. Uses an already-built binary.
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+BINARY="$REPO/build/vio_live/live/vio_live"
+[ -f "$BINARY" ] || { echo 'Build the live harness first.' >&2; exit 1; }
+TMP_STAGE=$(mktemp -d)
+trap 'rm -rf "$TMP_STAGE"' EXIT
+cp "$BINARY" "$TMP_STAGE/vio_live"
+cp "$REPO/src/vio_live.py" "$TMP_STAGE/vio_live.py"
+cat > "$TMP_STAGE/install.sh" <<'INSTALL'
+#!/bin/bash
+set -euo pipefail
+stage=/home/luke/vio-tracking-staged
+cd "$stage"
+sha256sum -c SHA256SUMS
+backup=$(mktemp -d /home/luke/vio-tracking-backup-XXXXXX)
+cp -a /home/luke/vio_live/vio_live "$backup/vio_live"
+cp -a /home/luke/src/vio_live.py "$backup/vio_live.py"
+was_active=0
+if systemctl is-active --quiet vio@luke; then was_active=1; fi
+systemctl stop vio@luke
+restore() {
+  echo "Deployment failed; restoring $backup" >&2
+  cp -a "$backup/vio_live" /home/luke/vio_live/vio_live
+  cp -a "$backup/vio_live.py" /home/luke/src/vio_live.py
+  if [ "$was_active" = 1 ]; then systemctl restart vio@luke; fi
+}
+trap restore ERR
+install -o luke -g luke -m 755 vio_live /home/luke/vio_live/vio_live
+install -o luke -g luke -m 644 vio_live.py /home/luke/src/vio_live.py
+if [ "$was_active" = 1 ]; then
+  systemctl start vio@luke
+  sleep 3
+  systemctl is-active --quiet vio@luke
+fi
+trap - ERR
+echo "Deployed; rollback files: $backup"
+sha256sum /home/luke/vio_live/vio_live /home/luke/src/vio_live.py
+journalctl -u vio@luke -n 12 --no-pager
+INSTALL
+(cd "$TMP_STAGE" && shasum -a 256 vio_live vio_live.py install.sh > SHA256SUMS)
+ssh viopi 'mkdir -p /home/luke/vio-tracking-staged'
+scp "$TMP_STAGE/vio_live" "$TMP_STAGE/vio_live.py" "$TMP_STAGE/install.sh" "$TMP_STAGE/SHA256SUMS" viopi:/home/luke/vio-tracking-staged/
+ssh viopi 'set -eu; cd /home/luke/vio-tracking-staged; sha256sum -c SHA256SUMS; export LD_LIBRARY_PATH=/home/luke/vio_live/lib; deps=$(ldd ./vio_live); if printf "%s\n" "$deps" | grep -q "not found"; then printf "%s\n" "$deps"; exit 1; fi; result=$(./vio_live 2>&1 || true); printf "%s\n" "$result"; printf "%s\n" "$result" | grep -q "usage: vio_live"'
+ssh -t viopi 'sudo bash /home/luke/vio-tracking-staged/install.sh'

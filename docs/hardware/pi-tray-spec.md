@@ -46,7 +46,7 @@ the first draft did not have, and has no open measurements.
 A flat plate bolted on top of the top plate at four existing standoff positions,
 carrying the Pi 5 on standoffs above it. It keeps the microSD slot, USB and GPIO
 reachable — the stated reason for putting the Pi up here at all
-([vio-quad-build-plan.md:90](vio-quad-build-plan.md:90)) — and gives the GPIO
+([vio-quad-build-plan.md:90](../archive/vio-quad-build-plan.md)) — and gives the GPIO
 shutdown button a mount that can be pressed with props on.
 
 ---
@@ -171,7 +171,7 @@ frame bolts in Y, so the tray carries no fore-aft cantilever.
 |---|---|---|
 | `PI_Y` | **0.0 mm** | Free — §2.3 retired the prop constraint |
 | `PI_X` | 0.0 mm | Centred |
-| `PI_HOLES` | 58.0 × 49.0, M2.5 | [vio-quad-build-plan.md:89](vio-quad-build-plan.md:89) |
+| `PI_HOLES` | 58.0 × 49.0, M2.5 | [vio-quad-build-plan.md:89](../archive/vio-quad-build-plan.md) |
 | `PI_BOARD` | 85.0 × 56.0 mm | Long axis fore-aft |
 | `TRAY_T` | **3.0 mm** | |
 | `STANDOFF_H` | 5.0 mm | M2.5 nylon, from the assortment already ordered |
@@ -350,7 +350,7 @@ straight to the header at X ≈ ±25. Nothing is cut, nothing passes under the b
 | Fan max / min | 30% / 20% |
 | Nozzle | 250 °C |
 | X-Y hole compensation | **0** — `FIT_HOLE` is in the geometry |
-| Bed | **70 °C, textured PEI** — no glue stick ([PROJECT.md:44](PROJECT.md:44)) |
+| Bed | **70 °C, textured PEI** — no glue stick ([PROJECT.md:44](../development-log.md)) |
 | Elephant foot compensation | 0.15 mm |
 
 At 3 mm with 5+5 shells at 0.2 mm, the part is 2 mm solid shell and 1 mm infill —

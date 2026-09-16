@@ -99,7 +99,7 @@ CSI ribbon widths follow directly from pin count and pitch:
 **The measured 11 mm is the 22-pin Pi-5 end, not the camera end.** If that is
 genuinely the widest end of the cable, then both ends are mini and it will not
 mate with the InnoMaker camera's 15-pin connector — precisely the risk flagged
-at [PROJECT.md:52](PROJECT.md:52). Count the contacts at each end (15 vs 22) to
+at [PROJECT.md:52](../development-log.md). Count the contacts at each end (15 vs 22) to
 settle it.
 
 The strain relief in §4.6 is sized for the 16 mm case, so it works either way
@@ -159,7 +159,7 @@ Plate origin `(u,v) = (0,0)` sits on the front face at `(0, CAM_Y, CAM_Z)`.
   | Connector/components on the back | **3.0 mm M2 spacers** | **M2 × 12** | 1.0 + 3.0 + 4.0 + 1.6 nut = 9.6 |
 
   Flush is stiffer — use standoffs only if the rear face forces it. Standoffs
-  here are legitimate: [vio-quad-build-plan.md:63](vio-quad-build-plan.md:63)
+  here are legitimate: [vio-quad-build-plan.md:63](../archive/vio-quad-build-plan.md)
   specifies 2–3 mm standoffs on both sensors, and a metal spacer inside a
   preloaded bolt path is not a compliance joint.
 - **Plain M2 nuts (1.6 mm), NOT nyloc.** The relief pockets in §5.3 are 2.5 mm
@@ -331,7 +331,7 @@ this is a part whose entire purpose is stiffness. Generic PETG profiles run the
 fan far higher than a strength part wants. 30% max is the compromise: enough to
 stop droop on a 38 × 54 footprint, low enough that layers actually weld.
 
-**Dry filament.** [PROJECT.md:44](PROJECT.md:44) already says to dry the spool
+**Dry filament.** [PROJECT.md:44](../development-log.md) already says to dry the spool
 before each session. On this part it is not cosmetic — wet PETG gives visibly
 weaker interlayer bonds, and interlayer bonding is what carries bending stress
 through the plate's thickness.
@@ -375,7 +375,7 @@ With a 118° horizontal FOV, 30° nose-down still leaves the top of the frame
 while filling most of the frame with close ground texture.
 
 Pure-down would be a mistake: it puts nearly every feature on one plane, which
-is the coplanar monocular degeneracy called out at [PROJECT.md:351](PROJECT.md:351).
+is the coplanar monocular degeneracy called out at [PROJECT.md:351](../development-log.md).
 
 ### Forward reach
 Computed against the real motor positions (r = 113.0, prop r = 63.5). Azimuth of
@@ -602,7 +602,7 @@ raise every mode; spreading the balls raises only the rocking and twist modes.
 | Fasteners, standoffs | ~3 g |
 | **Bracket total** | **~20 g** |
 
-[vio-quad-build-plan.md:63](vio-quad-build-plan.md:63) estimates ~3 g for the
+[vio-quad-build-plan.md:63](../archive/vio-quad-build-plan.md) estimates ~3 g for the
 plate. That was optimistic: 4 mm at 100% infill over the area needed to host a
 32 × 32 camera board — with enough edge margin that the bolt holes do not crack
 out — is ~10 g, and there is no way around it without giving up
@@ -610,4 +610,4 @@ the thickness³ stiffness argument that justified 4 mm in the first place.
 
 AUW impact is negligible — roughly 660 → 667 g, hover throttle unchanged at
 ~39%. But the "printed tray + mounts ~35 g" line in
-[PROJECT.md:289](PROJECT.md:289) should be revised upward.
+[PROJECT.md:289](../development-log.md) should be revised upward.

@@ -1,4 +1,9 @@
-# PROJECT.md — GPS-Denied VIO Quadcopter
+# Development log — GPS-Denied VIO Quadcopter
+
+Historical experiments and design decisions. Earlier entries may be superseded
+by later findings, and command examples can refer to the directory layout used
+at the time. See the [README](../README.md) for the current overview and
+[setup guide](setup.md) for current paths and deployment instructions.
 
 ## Objective
 
@@ -777,7 +782,7 @@ procedure still waits for GPS to establish the origin.
 
 **Outstanding flight issue:** simplifying the launch does not resolve the
 September 15 altitude/fusion findings. See
-[`results/flight-review-2026-09-15/README.md`](results/flight-review-2026-09-15/README.md).
+[`results/flight-review-2026-09-15/README.md`](../results/flight-review-2026-09-15/README.md).
 
 References: [AUTO mode](https://ardupilot.org/copter/docs/auto-mode.html),
 [home and EKF origin](https://ardupilot.org/dev/docs/mavlink-get-set-home-and-origin.html).
@@ -1852,7 +1857,7 @@ correct the whole time.
 this project and would have been wrong even had it worked: `sRGB` applies a
 gamma transfer function, which is a nonlinear intensity transform sitting
 directly in front of a corner detector, on a project whose camera section
-([PROJECT.md:104](PROJECT.md:104)) already rejects processed output on exactly
+([PROJECT.md:104](development-log.md)) already rejects processed output on exactly
 those grounds. **All camera capture from here — focus, Kalibr, flight
 recording — goes through `rpicam-raw`.** `harness/focus_check.py` does, and
 documents why in its docstring.
@@ -1885,7 +1890,7 @@ Kalibr measures it.
 **Focus baseline, for step 6.** As-shipped, indoors, at 15 ms / gain 1:
 **focus score 5.5** (noise-suppressed), 16×16 block stddev median 1.71, no
 clipping. The lens is far out of focus, which is expected and is what
-[PROJECT.md:106](PROJECT.md:106) predicted once the real 2.8 mm focal length
+[PROJECT.md:106](development-log.md) predicted once the real 2.8 mm focal length
 moved hyperfocal to ~0.9 m. That number is the floor to beat; expect a large
 multiple, not a few percent.
 
@@ -1935,7 +1940,7 @@ as focus improves; still high at the peak means the gain is too high.
 
 ### Timestamps: the highest-risk item, measured and passed (2026-09-07)
 
-Requirement 2 of the camera derivation ([PROJECT.md:80](PROJECT.md:80)) makes
+Requirement 2 of the camera derivation ([PROJECT.md:80](development-log.md)) makes
 timestamp *variance* the thing that matters — a constant camera-IMU offset is
 estimated online as `calib_camimu_dt`, a varying one is unmodelable. PROJECT.md
 called this the highest-risk item in the build and the reason the Pi was chosen
@@ -1949,7 +1954,7 @@ and gain pinned, `main` stream shrunk to 64×64 so the ISP is not in the way:
 
 **Userspace arrival is 82× noisier than the hardware stamp**, and zero frames
 were dropped over 300. That ratio is the CSI-over-UVC decision at
-[PROJECT.md:86](PROJECT.md:86) measured rather than argued — a UVC camera
+[PROJECT.md:86](development-log.md) measured rather than argued — a UVC camera
 forces the 49 µs column. It also gets *worse* under load: at 60 fps arrival
 jitter rose to 439 µs while `SensorTimestamp` jitter improved to 0.39 µs. The
 two paths diverge in opposite directions exactly when it matters.
@@ -2651,7 +2656,7 @@ no feedback. A wrong gain integrates for the whole session. Ours is wrong by
 factory trim did not remove.
 
 This is precisely the unmodelable error the camera work at
-[PROJECT.md:84](PROJECT.md:84) exists to prevent. `calib_camimu_dt` estimates a
+[PROJECT.md:84](development-log.md) exists to prevent. `calib_camimu_dt` estimates a
 *constant* camera-IMU offset; this one ramps at 2 ms per second.
 
 **Two measurements were reinterpreted by this.** "Delivery latency" of 46 ms at
@@ -2738,7 +2743,7 @@ The first overlay carried a pinctrl fragment muxing GPIO25 as an input. It was
 deleted before installation, with the reasoning that requesting an interrupt
 configures the pad anyway and fewer fragments meant fewer failure modes. True
 on BCM283x. **False on RP1**, where Pi 5 GPIO moved to the southbridge — the
-same architectural shift already recorded at [PROJECT.md:185](PROJECT.md:185)
+same architectural shift already recorded at [PROJECT.md:185](development-log.md)
 for the shutdown button.
 
 The result had no error anywhere in it. The driver bound, enumerated both IIO
@@ -2840,7 +2845,7 @@ $ find /lib/modules/$(uname -r) -name '*lsm6*'      # nothing
 ```
 
 Pi OS ships 55 IIO modules and exactly two IMU drivers, `inv-mpu6050` and
-`bno055`. The claim at [PROJECT.md:119](PROJECT.md:119) that the ISM330DHCX has
+`bno055`. The claim at [PROJECT.md:119](development-log.md) that the ISM330DHCX has
 a "mainline `st_lsm6dsx` IIO driver" is true of upstream and false of the
 kernel actually running, and nothing in the part-selection reasoning checked the
 distribution rather than upstream. Kernel headers **are** installed for the
@@ -2849,7 +2854,7 @@ running kernel, so an out-of-tree build is the fix, and it is not done yet.
 **It does not block the Allan run, and that is a fact about the part rather
 than a workaround.** Allan variance needs a long stationary series that is
 uniformly sampled; the ISM330DHCX samples and buffers on its own schedule in
-hardware, which is [the property it was chosen for](PROJECT.md:121). Draining
+hardware, which is [the property it was chosen for](development-log.md). Draining
 that FIFO from userspace yields the same samples the kernel driver would have
 handed over. The driver matters when IMU samples have to share a clock with
 camera frames — Phase 6, not this.
@@ -2868,7 +2873,7 @@ Measured over two minutes against the host monotonic clock, twice: **439.84 and
 440.09 Hz for a requested 416 Hz, +5.8 %**, with zero FIFO overruns. Plain
 internal-oscillator tolerance, uncalibrated.
 
-The same shape as the camera's [4.2 % long frame rate](PROJECT.md:1493), and
+The same shape as the camera's [4.2 % long frame rate](development-log.md), and
 the same lesson: **the estimator consumes timestamps, not a nominal rate**, and
 anything that assumes the nominal rate is wrong by that much. The first version
 of the logger stamped samples at `i / 416`, which would have stretched every tau
@@ -2882,7 +2887,7 @@ assume 416 Hz either.
 
 ### The `pkill` trap, paid for twice (2026-09-09)
 
-[PROJECT.md:472](PROJECT.md:472) already records that `pkill -f` matches the
+[PROJECT.md:472](development-log.md) already records that `pkill -f` matches the
 shell that issued it when the pattern is in that shell's own command line. Used
 it anyway inside an `ssh` command line to clear a stale capture; it killed the
 SSH session before the launch line ran, and the three-hour run silently did not
