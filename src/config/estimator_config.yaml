@@ -284,9 +284,9 @@ downsize_aruco: true
 # the features the filter actually uses per update, and if that number goes to
 # zero while the images are still trackable, the gate is the problem.
 up_msckf_sigma_px: 1
-up_msckf_chi2_multipler: 1
+up_msckf_chi2_multipler: 5
 up_slam_sigma_px: 1
-up_slam_chi2_multipler: 1
+up_slam_chi2_multipler: 5
 up_aruco_sigma_px: 1
 up_aruco_chi2_multipler: 1
 
