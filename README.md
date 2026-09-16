@@ -6,6 +6,7 @@ I built the hardware and software integration needed to run OpenVINS onboard a s
 I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
 
 https://github.com/user-attachments/assets/e7e14323-1aef-48ec-923d-263cbb5268eb
+Onboard camera footage showing the visual features OpenVINS tracks to estimate the drone’s motion without GPS.
 
 ## How it works
 
