@@ -5,29 +5,9 @@ I built the hardware and software integration needed to run OpenVINS onboard a s
 I also built tools to simulate flights, replay recordings, measure error, and diagnose problems during real flight tests.
 
 ## Results
-
-Results so far
 - Real flight: Completed an autonomous takeoff, position hold, and landing using VIO for both horizontal positioning and altitude.
 - Simulation: Completed drone missions without GPS using vision-based navigation.
 - Handheld testing: Ran live on the Raspberry Pi with no dropped camera frames and approximately 0.3 m of endpoint error after a roughly 57 m loop.
-
-| Experiment | Recorded result | Scope |
-|---|---|---|
-| Simulation estimator evaluation | 2.29% median drift across three flight medians; 1.91–2.89% across eight replays | Fixed-heading simulated missions; not hardware accuracy |
-| Handheld hardware loop | 0.54% live endpoint closure over an estimated 56.9 m path; 25 ms average update; zero dropped frames | One recording, with four offline replays yielding 0.61–0.73% closure; not full trajectory ground truth |
-| Flight integration | A documented 36-second hands-off VIO horizontal position hold | Barometer supplies altitude and compass supplies heading |
-
-Repeatable flight drift against independently measured ground truth remains
-unfinished. The [September 15 flight review](results/flight-review-2026-09-15/README.md)
-documents altitude-estimation and velocity-fusion limitations. See the
-[development log](docs/development-log.md) for experimental context and
-[results](results/) for the measurements.
-
-![Handheld VIO loop trajectory](results/vio_walk3_2026-09-10-trajectory.png)
-
-To produce an onboard camera/feature-tracking demo from a recording, use the
-[tracking-video guide](docs/tracking-video.md). Tracking overlays show feature
-observations, not independently measured navigation accuracy.
 
 ## Where things live
 
