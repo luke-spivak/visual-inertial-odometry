@@ -19,7 +19,7 @@ All motion estimation runs onboard.
 - Real flight: Completed an autonomous takeoff, position hold, and landing using VIO for both horizontal positioning and altitude.
 - Simulation: Completed drone missions without GPS using vision-based navigation.
 
-## Where things live
+## Repository structure
 
 | Directory | Contents |
 |---|---|
