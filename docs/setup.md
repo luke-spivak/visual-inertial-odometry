@@ -26,13 +26,13 @@ reorganization; commands in this guide use the current layout.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r tools/requirements-test.txt
-python -m pytest -q src tools/test_render_tracking.py sim/ros2/vio_bridge/test
+python -m pytest -q src tools/tracking/test_render_tracking.py sim/ros2/vio_bridge/test
 ```
 
 The test dependencies cover coordinate transforms, session management, and
 tracking-video rendering. Other analysis tools can additionally need
 Matplotlib, PyYAML, pymavlink, or ROS; their imports and usage comments describe
-their inputs. `tools/render_tracking.py` uses FFmpeg supplied by imageio-ffmpeg.
+their inputs. `tools/tracking/render_tracking.py` uses FFmpeg supplied by imageio-ffmpeg.
 
 The feature logger also has a standalone C++17 test:
 
@@ -45,7 +45,7 @@ c++ -std=c++17 -pthread -I src/openvins_runner \
 Score a retained handheld estimate without hardware or ROS:
 
 ```sh
-python tools/vio_closure.py results/vio_walk3_2026-09-10-live-estimate.txt
+python tools/evaluation/vio_closure.py results/vio_walk3_2026-09-10-live-estimate.txt
 ```
 
 ## Raspberry Pi
@@ -54,7 +54,7 @@ The existing target is a Pi 5 running Debian 13-based Raspberry Pi OS, with
 rpicam-raw, the OV9281 camera, and the ISM330DHCX on SPI. It requires the IIO
 driver/overlay and monotonic timestamp setup described in the
 [development log](development-log.md). Driver build scripts, device-tree
-sources, and the timestamp patch live in `tools/`. The runtime also requires
+sources, and the timestamp patch live in `tools/sensors/`. The runtime also requires
 NumPy and pymavlink in the Pi's system Python environment.
 
 The heavy C++ build uses Docker and SSH access to the Pi:
@@ -62,7 +62,7 @@ The heavy C++ build uses Docker and SSH access to the Pi:
 ```sh
 bash tools/buildenv/buildenv.sh build
 PI=viopi bash tools/buildenv/buildenv.sh verify
-PI=viopi bash tools/build_vio.sh
+PI=viopi bash tools/deploy/build_vio.sh
 ```
 
 `verify` runs a probe on the Pi. `build_vio.sh` builds **and deploys**: it pins
@@ -95,8 +95,9 @@ sudo python3 ~/src/vio_live.py ~/vio/bench
 
 To use calibration/diagnostic tools on the Pi, clone this repository there
 or copy `tools/` and `src/` as siblings. Scripts such as
-`tools/kalibr_capture_imucam.sh` resolve the shared IMU helper from `../src/`.
-The incremental `tools/deploy_tracking.sh` remains specific to the existing
+`tools/calibration/kalibr_capture_imucam.sh` resolve the shared IMU helper
+from `../../src/` relative to their script directory.
+The incremental `tools/deploy/deploy_tracking.sh` remains specific to the existing
 `luke` account and expects the new `~/src/` deployment; use `build_vio.sh`
 for the complete deployment.
 
@@ -121,14 +122,14 @@ colcon build --base-paths sim/ros2 \
   --build-base "$HOME/ws_vio/build" \
   --install-base "$HOME/ws_vio/install" --symlink-install
 WORLD=iris_field_vio.sdf RECORD_SENSORS=1 bash sim/run_sim_vio.sh example
-bash tools/analyze_run.sh ~/vio_runs/simvio_example
+bash tools/evaluation/analyze_run.sh ~/vio_runs/simvio_example
 ```
 
-`tools/sync_to_vm.sh` and `sync_from_vm.sh` synchronize only the ROS package;
+`tools/deploy/sync_to_vm.sh` and `sync_from_vm.sh` synchronize only the ROS package;
 they do not deploy the entire simulation. Pass the host/workspace explicitly
 when using them outside the original VM setup.
 
-Hardware recordings can be converted with `tools/vio_bag_from_raw.py` and
-replayed with `tools/replay_openvins.sh` in the ROS environment. Supply the
+Hardware recordings can be converted with `tools/evaluation/vio_bag_from_raw.py` and
+replayed with `tools/evaluation/replay_openvins.sh` in the ROS environment. Supply the
 recording's matching estimator config through `CONFIG`; the default is the
 simulation configuration.

@@ -2,10 +2,10 @@
 # kalibr_capture_imucam.sh -- record camera and IMU together for Kalibr's
 # camera-IMU calibration (step 6). Runs on the Pi, with a terminal (sudo):
 #
-#   ssh -t viopi 'bash ~/tools/kalibr_capture_imucam.sh [seconds] [out_prefix]'
+#   ssh -t viopi 'bash ~/tools/calibration/kalibr_capture_imucam.sh [seconds] [out_prefix]'
 #
 # Also records the step 7 VIO walks (camera at flight rate):
-#   ssh -t viopi 'FPS=20 bash ~/tools/kalibr_capture_imucam.sh 120 ~/vio/walk1'
+#   ssh -t viopi 'FPS=20 bash ~/tools/calibration/kalibr_capture_imucam.sh 120 ~/vio/walk1'
 # FPS is passed through to kalibr_capture.sh; MAX_SHUTTER (us, default 1000) caps exposure.
 #
 # 1. Asks for the sudo password up front -- the IIO device is root-only -- so
@@ -51,7 +51,7 @@ PY
 
 IMU_MIN=$(python3 -c "print(($SECS + 6) / 60)")
 echo "=== IMU logging starts; camera in 2 s -- start moving the rig ==="
-sudo python3 "$HERE/../src/imu_log.py" --minutes "$IMU_MIN" --odr 416 \
+sudo python3 "$HERE/../../src/imu_log.py" --minutes "$IMU_MIN" --odr 416 \
      --accel-range 16 --gyro-range 2000 --out "$OUT.imu" > "$OUT.imu.log" 2>&1 &
 IMU_PID=$!
 sleep 2

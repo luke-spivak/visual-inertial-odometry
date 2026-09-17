@@ -170,7 +170,7 @@ def main():
         fail("needs root for the IMU: run with sudo")
     for f in (a.bin, a.config):
         if not os.path.exists(f):
-            fail(f"{f} not found -- run tools/build_vio.sh on the Mac")
+            fail(f"{f} not found -- run tools/deploy/build_vio.sh on the Mac")
     out = os.path.abspath(a.out)
     est = os.path.abspath(a.est) if a.est else out + ".est.txt"
     os.makedirs(os.path.dirname(out), exist_ok=True)

@@ -10,7 +10,7 @@ Runs on the Pi, as root (sysfs writes).
 
 Writes <out>_accel.bin and <out>_gyro.bin -- raw IIO records, byte for byte as
 the chardev delivered them -- plus <out>.json describing the record layout,
-scales and ODR. tools/allan.py reads the json.
+scales and ODR. tools/calibration/allan.py reads the json.
 
 Two things this deliberately does not do. It does not convert to SI or to CSV
 on the fly: the capture loop should do nothing but drain and write, because a

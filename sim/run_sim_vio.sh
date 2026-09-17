@@ -196,7 +196,7 @@ sleep 8
 # recorded exactly zero odometry messages because the ground was a flat grey.
 # ALLOW_BLACK=1 overrides it, for deliberately diagnosing the renderer.
 echo "==> camera check"
-python3 "$HERE/../tools/check_camera.py" --n 2 --wait 120 2>&1 | tee "$RUN/camera_check.log" || true
+python3 "$HERE/../tools/evaluation/check_camera.py" --n 2 --wait 120 2>&1 | tee "$RUN/camera_check.log" || true
 if grep -qE "UNTRACKABLE|LOOKS BLACK|NO IMAGES" "$RUN/camera_check.log" 2>/dev/null; then
   echo "    camera is not producing a usable image." >&2
   echo "    Diagnose with the standalone probe world, which renders known" >&2
@@ -385,7 +385,7 @@ sleep 4
 # Trackability trace across the flight. The gate above proves the scene renders
 # at rest; this says whether the imagery the estimator actually consumed was any
 # good, which is what explains a bad ATE afterwards.
-nohup python3 "$HERE/../tools/check_camera.py" --n 999 --every 10 --wait 900 \
+nohup python3 "$HERE/../tools/evaluation/check_camera.py" --n 999 --every 10 --wait 900 \
   --save-dir "$RUN/frames" > "$RUN/camera_inflight.log" 2>&1 &
 CAMPID=$!
 own "$CAMPID"

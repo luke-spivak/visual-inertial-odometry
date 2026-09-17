@@ -30,7 +30,7 @@ Onboard camera footage showing the visual features OpenVINS tracks to estimate t
 |---|---|
 | [src/](src/) | Pi flight software, runtime configuration, missions, and tests |
 | [sim/](sim/) | Gazebo worlds, ROS bridge, simulation configuration and mission scripts |
-| [tools/](tools/) | Calibration, replay, analysis, diagnostics, and build scripts |
+| [tools/](tools/README.md) | Calibration, replay, analysis, diagnostics, and build scripts |
 | [docs/](docs/) | Setup, hardware specifications, development history, and archived plans |
 | [results/](results/) | Recorded measurements, plots, and experiment reports |
 
@@ -47,7 +47,7 @@ For the standalone Python tests on a desktop:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r tools/requirements-test.txt
-python -m pytest -q src tools/test_render_tracking.py sim/ros2/vio_bridge/test
+python -m pytest -q src tools/tracking/test_render_tracking.py sim/ros2/vio_bridge/test
 ```
 
 See the [setup and deployment guide](docs/setup.md) for Raspberry Pi deployment,

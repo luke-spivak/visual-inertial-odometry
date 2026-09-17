@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run from the Mac while the aircraft is disarmed. Uses an already-built binary.
 set -euo pipefail
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 BINARY="$REPO/build/vio_live/openvins_runner/vio_live"
 [ -f "$BINARY" ] || { echo 'Build the live harness first.' >&2; exit 1; }
 TMP_STAGE=$(mktemp -d)

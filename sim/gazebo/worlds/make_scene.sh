@@ -57,4 +57,4 @@ python3 "$HERE/make_feature_field.py" \
 # non-zero on a collision risk, so a caller that ignores it still fails loudly.
 #
 # Resolve the diagnostic from this checkout, independent of the working directory.
-python3 "$HERE/../../../tools/field_clearance.py" "$OUT" "$ALT"
+python3 "$HERE/../../../tools/evaluation/field_clearance.py" "$OUT" "$ALT"

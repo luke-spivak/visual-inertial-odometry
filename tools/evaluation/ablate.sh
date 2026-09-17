@@ -13,7 +13,7 @@ set -eo pipefail
 
 RUN="${1:?usage: ablate.sh RUN_DIR}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-BASE="$HERE/../sim/config/estimator_config.yaml"
+BASE="$HERE/../../sim/config/estimator_config.yaml"
 RATE="${RATE:-1.0}"
 VARIANTS="${VARIANTS:-nocalib gravity nocalib_gravity}"
 
@@ -34,7 +34,7 @@ set_key() {
 # relative name, so the copy has to sit in the same directory.
 mk() {
   local name="$1"; shift
-  local f="$HERE/../sim/config/ablate_${name}.yaml"
+  local f="$HERE/../../sim/config/ablate_${name}.yaml"
   cp "$BASE" "$f"
   while [ $# -gt 0 ]; do set_key "$f" "$1" "$2"; shift 2; done
   echo "$f"

@@ -10,7 +10,7 @@
 # all zeros on this camera, and sRGB's gamma would sit in front of the corner
 # detector even if it worked. Writes <prefix>.y16 (frames concatenated, in the
 # R8 mode's 8-bit-in-16 layout) and <prefix>.pts (one timestamp per frame, ms
-# with microsecond decimals). tools/kalibr_bag_from_raw.py turns the pair
+# with microsecond decimals). tools/calibration/kalibr_bag_from_raw.py turns the pair
 # into a Kalibr bag on the VM.
 #
 # Mode: 1280x800, full resolution -- the mode that flies. Intrinsics do not

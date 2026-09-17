@@ -21,7 +21,7 @@ Build/deploy the updated live harness using the existing workflow, while the
 vehicle is disarmed and the VIO service is stopped:
 
 ```sh
-tools/build_vio.sh
+tools/deploy/build_vio.sh
 ```
 
 This command **deploys to the Pi**; compilation during development does not.
@@ -38,7 +38,7 @@ multiple flights: disarming alone does not end the existing recording service.
 Then run on the desktop (from your Python environment):
 
 ```sh
-python tools/fetch_tracking.py datasets/flights
+python tools/tracking/fetch_tracking.py datasets/flights
 ```
 
 This fetches runs with a `.complete.json` marker from `viopi:~/vio`, then renders
@@ -52,7 +52,7 @@ it explicitly so your local shell does not expand it).
 For an already-downloaded run, including an older or interrupted recording:
 
 ```sh
-python tools/render_tracking.py datasets/flights/run-YYYYMMDD-HHMMSS
+python tools/tracking/render_tracking.py datasets/flights/run-YYYYMMDD-HHMMSS
 ```
 
 Older recordings with no feature log produce plain camera video, explicitly

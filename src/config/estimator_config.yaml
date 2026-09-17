@@ -161,7 +161,7 @@ init_max_features: 50 # how many features to track during initialization (saves 
 # before motion starts, and that was impossible until the world gained a
 # high-resolution takeoff pad: sitting on the runway at 0.215 m, each 1.95 cm
 # ground texel spanned ~35 px and the view was a smooth blur. Measured with
-# tools/count_features.py, before and after the pad:
+# tools/evaluation/count_features.py, before and after the pad:
 #
 #     ground (0.215 m)   18 corners, 4/25 cells   ->   200, 25/25
 #     altitude (15 m)   200 corners, 25/25 cells  ->   200, 25/25

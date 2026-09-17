@@ -21,7 +21,7 @@ RATE="${2:-0.5}"
 # CONFIG lets an ablation point the estimator at a variant config without
 # editing the canonical one. OUT_TAG keeps the variants' outputs apart.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="${CONFIG:-$HERE/../sim/config/estimator_config.yaml}"
+CONFIG="${CONFIG:-$HERE/../../sim/config/estimator_config.yaml}"
 # START_OFFSET skips the head of the bag. The estimator should not be running
 # through a long stationary period: with no motion there is no parallax, MSCKF
 # features cannot be triangulated, and the filter propagates on IMU alone and

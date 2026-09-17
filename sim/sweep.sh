@@ -105,7 +105,7 @@ printf '%s\n' "$CONFIGS" | while read -r NAME REST; do
     continue
   fi
 
-  if ! bash "$HERE/../tools/analyze_run.sh" "$RUN" "$REPEATS" 1.0 > "$OUT/$NAME.eval.log" 2>&1; then
+  if ! bash "$HERE/../tools/evaluation/analyze_run.sh" "$RUN" "$REPEATS" 1.0 > "$OUT/$NAME.eval.log" 2>&1; then
     echo "   ANALYSIS FAILED -- see $OUT/$NAME.eval.log" >&2
     continue
   fi

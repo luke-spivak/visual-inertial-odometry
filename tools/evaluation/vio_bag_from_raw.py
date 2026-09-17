@@ -24,7 +24,8 @@ import rosbag2_py
 from rclpy.serialization import serialize_message
 from sensor_msgs.msg import Image, Imu
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Keep direct script execution working from any current directory.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "calibration"))
 from kalibr_imu_csv import load  # noqa: E402
 
 

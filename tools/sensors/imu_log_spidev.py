@@ -7,7 +7,7 @@ hardware FIFO over spidev, with no kernel IIO driver in the picture.
     ./imu_log_spidev.py --hours 3   --out ~/imu/run1      # the real thing
 
 Writes the same files imu_log.py does -- <out>_accel.bin, <out>_gyro.bin and
-<out>.json -- so tools/allan.py reads either without knowing the difference.
+<out>.json -- so tools/calibration/allan.py reads either without knowing the difference.
 
 Why this exists. Pi OS ships no st_lsm6dsx: the running kernel's config says
 "# CONFIG_IIO_ST_LSM6DSX is not set", and there is no module on disk, so the
@@ -109,7 +109,7 @@ def configure(imu, odr, accel_g, gyro_dps):
     who = imu.read(WHO_AM_I)[0]
     if who != EXPECTED:
         sys.exit(f"WHO_AM_I 0x{who:02X}, expected 0x{EXPECTED:02X} -- "
-                 f"run tools/imu_probe.py")
+                 f"run tools/sensors/imu_probe.py")
 
     code = ODR_CODE[odr]
     imu.write(CTRL3_C, 0x44)                                  # BDU | IF_INC

@@ -2,12 +2,12 @@
 # sync_to_vm.sh — push sim/ros2/ packages from this repo into the VM's colcon workspace.
 # Canonical copy is here in git; the VM is a deploy target, not a source of truth.
 #
-# Usage: ./tools/sync_to_vm.sh [HOST] [REMOTE_WS]
+# Usage: ./tools/deploy/sync_to_vm.sh [HOST] [REMOTE_WS]
 set -eo pipefail
 
 HOST="${1:-luke@192.168.64.3}"
 WS="${2:-~/ws_vio}"
-SRC="$(cd "$(dirname "$0")/.." && pwd)/sim/ros2/"
+SRC="$(cd "$(dirname "$0")/../.." && pwd)/sim/ros2/"
 
 ssh "$HOST" "mkdir -p $WS/src"
 # --update: never overwrite a file that is NEWER on the VM. Editing happens in

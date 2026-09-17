@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh -- build vio_live for viopi in the buildenv container and deploy it.
 #
-#   tools/build_vio.sh          build, bundle, copy to viopi:~/vio_live, gate
+#   tools/deploy/build_vio.sh          build, bundle, copy to viopi:~/vio_live, gate
 #
 # 1. OpenVINS, ROS-free, pinned to upstream 6948812 -- the parent of the VM's
 #    local commit, which only ports ROS 2 includes and so changes nothing here.
@@ -20,7 +20,7 @@
 #    usage message.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$HERE/.." && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
 IMAGE="${IMAGE:-vio-build:trixie}"
 PI="${PI:-viopi}"
 OV_SHA=69488123ed9362dd44b6f28e7f4680abbff1442b

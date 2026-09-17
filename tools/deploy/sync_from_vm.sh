@@ -9,7 +9,7 @@ set -eo pipefail
 
 HOST="${1:-luke@192.168.64.3}"
 WS="${2:-~/ws_vio}"
-DEST="$(cd "$(dirname "$0")/.." && pwd)/sim/ros2/"
+DEST="$(cd "$(dirname "$0")/../.." && pwd)/sim/ros2/"
 
 rsync -av --delete \
   --exclude '__pycache__' --exclude '*.pyc' --exclude '*.egg-info' \

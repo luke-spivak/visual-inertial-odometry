@@ -13,7 +13,7 @@
 # rather than stopping halfway.
 #
 # Run ON the VM:      ./kalibr_setup.sh
-# Or from the Mac:    ssh luke@192.168.64.3 'bash -s' < tools/kalibr_setup.sh
+# Or from the Mac:    ssh luke@192.168.64.3 'bash -s' < tools/calibration/kalibr_setup.sh
 set -euo pipefail
 
 NEED_GB=${NEED_GB:-9}          # docker engine + kalibr image + build layers
@@ -220,6 +220,6 @@ detector cannot disagree:
 
 That is sized for A2 with ~23 mm side margins. It writes the PDF only; the
 target YAML Kalibr reads is written by hand. PRINT IT, THEN MEASURE IT -- see
-tools/kalibr_compare.py's docstring for why the printed size, not the
+tools/calibration/kalibr_compare.py's docstring for why the printed size, not the
 requested size, is what goes in the YAML.
 EOF
