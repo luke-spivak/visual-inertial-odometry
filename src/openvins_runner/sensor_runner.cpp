@@ -1,6 +1,6 @@
-// vio_live.cpp -- OpenVINS running live on viopi. No ROS.
+// sensor_runner.cpp -- OpenVINS running live on viopi. No ROS.
 //
-// Started by src/vio_live.py, which configures the IIO devices, starts
+// Started by src/capture_session.py, which configures the IIO devices, starts
 // rpicam-raw and hands this program:
 //   --imu FILE     one line per sensor: kind chardev record_bytes scale ts_off x_off y_off z_off
 //   --frames FIFO  rpicam-raw -o: raw Y16 frames, 8-bit data in the high byte
@@ -449,7 +449,7 @@ static void update_thread(Shared &S, FILE *out) {
     fprintf(out, "%.9f %.9f %.9f %.9f %.9f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f\n",
             state->_timestamp, q(0), q(1), q(2), q(3), p(0), p(1), p(2), v(0), v(1), v(2),
             bg(0), bg(1), bg(2), ba(0), ba(1), ba(2));
-    fflush(out);  // vio_mavlink.py follows this file live; unflushed, poses reach the FC in 4 KB bursts
+    fflush(out);  // mavlink_bridge.py follows this file live; unflushed, poses reach the FC in 4 KB bursts
     std::lock_guard<std::mutex> lk(S.st_mtx);
     if (!S.init) {
       S.init = true;

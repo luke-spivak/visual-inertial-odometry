@@ -24,7 +24,7 @@ find_package(Ceres REQUIRED)
 # flag, and a mismatch is a silent layout difference, not a link error.
 add_definitions(-DENABLE_ARUCO_TAGS=0)
 
-add_executable(vio_live vio_live.cpp)
+add_executable(vio_live sensor_runner.cpp)
 target_include_directories(vio_live PRIVATE
     ${OV_SRC}/ov_core/src ${OV_SRC}/ov_init/src ${OV_SRC}/ov_msckf/src
     ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})

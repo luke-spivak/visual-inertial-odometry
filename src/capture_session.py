@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-vio_live.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
+capture_session.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
 
-    ssh -t viopi 'sudo python3 ~/src/vio_live.py ~/vio/walk1'           # until Ctrl-C
-    ssh -t viopi 'sudo python3 ~/src/vio_live.py ~/vio/walk1 --secs 180'
+    ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1'           # until Ctrl-C
+    ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1 --secs 180'
 
 1. Auto-exposure probe, 2.5 s: point the camera at the scene. Shutter capped
    at --max-shutter us (default 4000) against motion blur, gain makes up the
@@ -20,10 +20,11 @@ vio_live.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
 5. vio_live low-passes the IMU at --imu-lpf Hz (default 50) before OpenVINS,
    against the motor vibration. The recording stays raw, so a replay is
    unfiltered unless the replay filters it too.
-6. SIGTERM stops it the way Ctrl-C does, so vio_flight.py (started at boot by
+6. SIGTERM stops it the way Ctrl-C does, so flight_supervisor.py (started at boot by
    vio@.service) can stop it and keep the recording.
 """
-import argparse, json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
+from cli import capture_parser, parse_capture_options
+import json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -141,31 +142,8 @@ def imu_setup(watermark, out):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("out", help="output prefix, e.g. ~/vio/walk1")
-    ap.add_argument("--secs", type=int, default=0, help="run length; 0 = until Ctrl-C")
-    ap.add_argument("--fps", type=float, default=20)
-    # 4 ms, not the 1 ms used for Kalibr. Bench run 1 (2026-09-10) at 1 ms in a
-    # dim room: temporal noise 9.4 DN against 3.0 DN of scene texture, FAST
-    # finding ~70k corners of pure noise, 17 % of them surviving one frame with
-    # the rig still -- no usable tracks, and the filter coasted on the IMU.
-    # Walking rotates ~30-60 dps: 2-4 px of blur at 4 ms, which KLT tolerates.
-    ap.add_argument("--max-shutter", type=int, default=4000)
-    ap.add_argument("--shutter", type=int, help="override the AE result; exposure time in microseconds")
-    ap.add_argument("--gain", type=float, help="analogue gain used with --shutter; default 1")
-    ap.add_argument("--exposure-sweep", action="store_true",
-                    help="test fixed exposures and select the brightest one below the clipping limit")
-    ap.add_argument("--watermark", type=int, default=8)
-    # The motors shake the sensor plate at 176-195 Hz; everything VIO needs is
-    # below ~20 Hz. 0 turns the filter off.
-    ap.add_argument("--imu-lpf", type=float, default=50.0, help="IMU low-pass cutoff, Hz; 0 = off")
-    ap.add_argument("--no-record", action="store_true")
-    ap.add_argument("--est", help="estimate file; default <out>.est.txt. vio_flight.py keeps it on tmpfs, "
-                                  "so a full SD card costs the recording, not the poses")
-    ap.add_argument("--bin", default=f"{user.pw_dir}/vio_live/vio_live")
-    ap.add_argument("--config", default=f"{user.pw_dir}/vio_live/config/estimator_config.yaml")
-    ap.add_argument("--verbosity", default="WARNING", help="OpenVINS print level")
-    a = ap.parse_args()
+    ap = capture_parser(user.pw_dir, description=__doc__)
+    a = parse_capture_options(ap)
     if os.geteuid() != 0:
         fail("needs root for the IMU: run with sudo")
     for f in (a.bin, a.config):
@@ -174,16 +152,12 @@ def main():
     out = os.path.abspath(a.out)
     est = os.path.abspath(a.est) if a.est else out + ".est.txt"
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    # Under systemd (vio_flight.py) a stop is SIGTERM to this process alone, with no
+    # Under systemd (flight_supervisor.py) a stop is SIGTERM to this process alone, with no
     # tty to hand SIGINT to rpicam-raw and vio_live as well. Take it as a Ctrl-C:
     # the finally block stops the camera, and vio_live ends when its FIFOs close.
     signal.signal(signal.SIGTERM, _sigterm)
 
     print("=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===")
-    if a.gain is not None and a.shutter is None:
-        ap.error("--gain requires --shutter")
-    if a.exposure_sweep and a.shutter is not None:
-        ap.error("--exposure-sweep cannot be combined with --shutter")
     sh, g = exposure_sweep() if a.exposure_sweep else ae_probe(a.max_shutter, a.shutter, a.gain)
     with open(out + ".exposure.json", "w") as f:
         json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)

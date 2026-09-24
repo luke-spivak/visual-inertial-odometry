@@ -1,15 +1,15 @@
-# vio@.service -- src/vio_flight.py from boot, as root, for the user named
+# vio@.service -- src/flight_supervisor.py from boot, as root, for the user named
 # after the @ (whose ~/src, ~/vio_live and ~/vio it uses). Install and use:
-# see vio_flight.py.
+# see flight_supervisor.py.
 [Unit]
-Description=VIO flight session for %i (src/vio_flight.py)
+Description=VIO flight session for %i (src/flight_supervisor.py)
 
 [Service]
 Environment=SUDO_USER=%i
-ExecStart=/usr/bin/python3 -u /home/%i/src/vio_flight.py --exposure-sweep
-# SIGTERM to vio_flight.py alone: it passes it to vio_live.py, which stops the
+ExecStart=/usr/bin/python3 -u /home/%i/src/flight_supervisor.py --exposure-sweep
+# SIGTERM to flight_supervisor.py alone: it passes it to capture_session.py, which stops the
 # camera and lets vio_live close the recording. Anything left is killed only if
-# that overruns TimeoutStopSec (vio_flight.py itself gives it 80 s).
+# that overruns TimeoutStopSec (flight_supervisor.py itself gives it 80 s).
 KillMode=mixed
 TimeoutStopSec=100
 Restart=on-failure

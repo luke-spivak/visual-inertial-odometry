@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-vio_mavlink.py -- stream the Pi's live VIO pose to ArduPilot as
+mavlink_bridge.py -- stream the Pi's live VIO pose to ArduPilot as
 VISION_POSITION_ESTIMATE over the Pi-FC UART. The Pi runs VIO without ROS, so
 this replaces sim/ros2/vio_bridge on hardware; same idea, extended for a camera
 that is not aligned with the airframe.
 
-    sudo python3 vio_live.py ~/vio/f1 --no-record     # writes ~/vio/f1.est.txt
-    python3 vio_mavlink.py ~/vio/f1.est.txt           # -> /dev/ttyAMA0 @ 230400
-    python3 vio_mavlink.py --expect-accel             # the pre-flight IMU check
+    sudo python3 capture_session.py ~/vio/f1 --no-record     # writes ~/vio/f1.est.txt
+    python3 mavlink_bridge.py ~/vio/f1.est.txt           # -> /dev/ttyAMA0 @ 230400
+    python3 mavlink_bridge.py --expect-accel             # the pre-flight IMU check
 
-On the aircraft vio_flight.py runs both from boot, using the Sender below;
+On the aircraft flight_supervisor.py runs both from boot, using the Sender below;
 these are for running by hand.
 
 It follows the estimate file vio_live writes, one line per processed frame
 ("timestamp q(JPL xyzw) p v bg ba"). vio_live must flush that file per line
-(vio_live.cpp does from 2026-09-11); otherwise poses arrive in 4 KB bursts,
+(sensor_runner.cpp does from 2026-09-11); otherwise poses arrive in 4 KB bursts,
 over a second late, and are dropped here as stale.
 
 FRAMES -- the part most likely to be silently wrong.
@@ -31,13 +31,13 @@ Sent: position of the IMU in NED, attitude of B in NED, and the IMU's velocity
 in NED as VISION_SPEED_ESTIMATE (for EK3_SRC2/3_VELZ 6; --no-velocity stops it).
 VISO_POS_X/Y/Z tells ArduPilot where the IMU sits, so no lever arm is applied here.
 
-The maths is unit-tested (test_vio_mavlink.py); the mounting is not, so check
+The maths is unit-tested (test_mavlink_bridge.py); the mounting is not, so check
 it on the aircraft before trusting it:
   1. Level and still, the Pi IMU must read what --expect-accel prints.
   2. By hand: nose down -> printed pitch goes negative; right side down -> roll
      goes positive; yaw clockwise seen from above -> yaw grows.
 """
-import argparse
+from cli import bridge_parser
 import math
 import os
 import time
@@ -159,11 +159,11 @@ def follow(path, poll_s=0.005):
     """Yield complete lines as they are appended; survive the file being recreated."""
     tail = Tail(path)
     if not os.path.exists(tail.path):
-        print(f"[vio_mavlink] waiting for {tail.path} to appear -- vio_live.py writes <prefix>.est.txt, "
+        print(f"[mavlink_bridge] waiting for {tail.path} to appear -- capture_session.py writes <prefix>.est.txt, "
               "so start it with the matching prefix", flush=True)
     while not os.path.exists(tail.path):
         time.sleep(0.2)
-    print(f"[vio_mavlink] following {tail.path}", flush=True)
+    print(f"[mavlink_bridge] following {tail.path}", flush=True)
     last_data, warned = time.monotonic(), False
     while True:
         lines = tail.poll()
@@ -172,7 +172,7 @@ def follow(path, poll_s=0.005):
             yield from lines
             continue
         if not warned and time.monotonic() - last_data > 5.0:
-            print("[vio_mavlink] no new poses for 5 s -- vio_live writes them from INITIALIZED on "
+            print("[mavlink_bridge] no new poses for 5 s -- vio_live writes them from INITIALIZED on "
                   "(rest it still until then); if it has said so, check it is still running", flush=True)
             warned = True
         time.sleep(poll_s)
@@ -184,7 +184,7 @@ NO_COV = [math.nan] + [0.0] * 20                     # "unknown", per the messag
 class Sender:
     """Estimate lines -> VISION_POSITION_ESTIMATE, plus the IMU's velocity as
     VISION_SPEED_ESTIMATE unless velocity is False; mav None sends nothing. Keeps
-    the rate and lag figures for the two-second report. vio_flight.py uses it too."""
+    the rate and lag figures for the two-second report. flight_supervisor.py uses it too."""
 
     def __init__(self, mav, tilt_deg, upside_down=False, velocity=True, max_lag=0.5, reset_counter=0):
         self.mav, self.tilt_deg, self.upside_down = mav, tilt_deg, upside_down
@@ -211,7 +211,7 @@ class Sender:
         if self.last_t is not None:
             if t < self.last_t:                      # a new vio_live run into the same file
                 self.reset_counter = (self.reset_counter + 1) % 256
-                print(f"[vio_mavlink] VIO restarted; reset_counter {self.reset_counter}", flush=True)
+                print(f"[mavlink_bridge] VIO restarted; reset_counter {self.reset_counter}", flush=True)
             elif t == self.last_t:
                 return False
         self.last_t = t
@@ -234,7 +234,7 @@ class Sender:
         self.lags.append(lag)
         self.shown = (n, e, d, roll, pitch, yaw)
         if not self.announced:
-            print(f"[vio_mavlink] first pose: lag {1000 * lag:.0f} ms | NED {n:+.2f} {e:+.2f} {d:+.2f} m"
+            print(f"[mavlink_bridge] first pose: lag {1000 * lag:.0f} ms | NED {n:+.2f} {e:+.2f} {d:+.2f} m"
                   f" | roll {math.degrees(roll):+.1f} pitch {math.degrees(pitch):+.1f}"
                   f" yaw {math.degrees(yaw):+.1f} deg", flush=True)
             self.announced = True
@@ -245,7 +245,7 @@ class Sender:
         now = time.monotonic()
         if now - self.t_report < 2.0:
             return None
-        msg = f"[vio_mavlink] {self.sent / (now - self.t_report):4.1f} Hz sent, {self.dropped} stale"
+        msg = f"[mavlink_bridge] {self.sent / (now - self.t_report):4.1f} Hz sent, {self.dropped} stale"
         if self.lags:
             self.lags.sort()
             msg += f" | lag {1000 * self.lags[len(self.lags) // 2]:4.0f} ms"
@@ -263,24 +263,7 @@ class Sender:
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("est", nargs="?", help="vio_live estimate file, e.g. ~/vio/f1.est.txt")
-    ap.add_argument("--device", default="/dev/ttyAMA0",
-                    help="serial device, or any pymavlink URL (e.g. udpout:HOST:14550)")
-    ap.add_argument("--baud", type=int, default=230400,
-                    help="must match SERIAL3_BAUD on the FC (230 = 230400)")
-    ap.add_argument("--tilt-deg", type=float, default=15.0,
-                    help="camera pitch below horizontal on the airframe, degrees (15 since 2026-09-13)")
-    ap.add_argument("--upside-down", action="store_true",
-                    help="camera image is upside down on the airframe (--expect-accel tells you)")
-    ap.add_argument("--no-velocity", action="store_true",
-                    help="send position only; by default VISION_SPEED_ESTIMATE goes too, for EK3_SRC2_VELZ 6")
-    ap.add_argument("--max-lag", type=float, default=0.5,
-                    help="drop poses older than this many seconds; 0 disables (file replay)")
-    ap.add_argument("--dry-run", action="store_true", help="print only; open no link")
-    ap.add_argument("--expect-accel", action="store_true",
-                    help="print what the Pi IMU should read level and still, then exit")
+    ap = bridge_parser(description=__doc__)
     a = ap.parse_args()
 
     if a.expect_accel:
@@ -300,8 +283,8 @@ def main():
         from pymavlink import mavutil
         mav = mavutil.mavlink_connection(a.device, baud=a.baud,
                                          source_system=1, source_component=197)
-        print(f"[vio_mavlink] MAVLink out: {a.device} @ {a.baud}", flush=True)
-    print(f"[vio_mavlink] camera {a.tilt_deg:g} deg nose-down, "
+        print(f"[mavlink_bridge] MAVLink out: {a.device} @ {a.baud}", flush=True)
+    print(f"[mavlink_bridge] camera {a.tilt_deg:g} deg nose-down, "
           f"{'upside-down' if a.upside_down else 'upright'}", flush=True)
 
     sender = Sender(mav, a.tilt_deg, a.upside_down, not a.no_velocity, a.max_lag)

@@ -64,8 +64,8 @@ echo "  bundle: vio_live + $(ls "$REPO/$B/bundle/lib" | wc -l | tr -d ' ') libs 
 
 ssh "$PI" 'mkdir -p ~/src'
 rsync -a --delete "$REPO/$B/bundle/" "$PI:vio_live/"
-scp -q "$REPO/src/vio_live.py" "$REPO/src/imu_log.py" "$REPO/src/vio_mavlink.py" \
-    "$REPO/src/vio_flight.py" "$REPO/src/vio@.service" "$PI:src/"
+scp -q "$REPO/src/capture_session.py" "$REPO/src/imu_log.py" "$REPO/src/mavlink_bridge.py" \
+    "$REPO/src/cli.py" "$REPO/src/flight_supervisor.py" "$REPO/src/vio@.service" "$PI:src/"
 
 ssh "$PI" 'missing=$(ldd ~/vio_live/vio_live | grep "not found" || true)
 [ -z "$missing" ] || { echo "  FAIL: on the Pi:"; echo "$missing"; exit 1; }

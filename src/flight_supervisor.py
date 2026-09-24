@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-vio_flight.py -- VIO on viopi from power-on to shutdown, nobody logged in. Started
-at boot by vio@.service; replaces ssh, tmux, and vio_live.py + vio_mavlink.py by hand.
+flight_supervisor.py -- VIO on viopi from power-on to shutdown, nobody logged in. Started
+at boot by vio@.service; replaces ssh, tmux, and capture_session.py + mavlink_bridge.py by hand.
 
     sudo cp ~/src/vio@.service /etc/systemd/system/     # once
     sudo systemctl daemon-reload
@@ -11,14 +11,14 @@ at boot by vio@.service; replaces ssh, tmux, and vio_live.py + vio_mavlink.py by
 
 1. Waits for the FC's heartbeat, so a Pi on the bench with the FC unpowered
    leaves the camera and IMU alone.
-2. Runs vio_live.py into ~/vio/run-<date>-<time> as by hand: exposure probe, IMU,
+2. Runs capture_session.py into ~/vio/run-<date>-<time> as by hand: exposure probe, IMU,
    estimator, recording. Recording is ~2.5 GB/min (41 MB/s of Y16) and now happens
    at every power-up, so below --min-free-gb a run goes --no-record. The estimate
    file stays on tmpfs until the run ends: poses reach the FC through it, and a
    full SD card must cost the recording, not the flight.
-3. Sends each pose with vio_mavlink.py's Sender, this aircraft's mount baked in
+3. Sends each pose with mavlink_bridge.py's Sender, this aircraft's mount baked in
    (camera 15 deg nose-down, image upside down).
-4. Passes on what matters in vio_live.py's output -- exposure, INITIALIZED, first
+4. Passes on what matters in capture_session.py's output -- exposure, INITIALIZED, first
    visual update, FAIL -- as STATUSTEXT, which QGC shows when connected. The
    journal has all of it.
 5. Viso Align at the first pose of every run, while disarmed. The FC aligns by
@@ -26,12 +26,12 @@ at boot by vio@.service; replaces ssh, tmux, and vio_live.py + vio_mavlink.py by
    AP_VisualOdom_IntelT265), and a restarted run's yaw is arbitrary. Until a run
    is aligned its poses are held back from an armed aircraft. (The FC's pre-arm
    check also refuses more than 10 deg between VIO and AHRS yaw.)
-6. When vio_live.py ends, starts a new run with the reset counter bumped, so the
+6. When capture_session.py ends, starts a new run with the reset counter bumped, so the
    EKF resets to the new frame instead of rejecting it.
 7. SIGTERM -- shutdown, the Pi's power button, systemctl stop -- goes on to
-   vio_live.py, which stops the camera and lets vio_live close the recording.
+   capture_session.py, which stops the camera and lets vio_live close the recording.
 """
-import argparse
+from cli import flight_parser, parse_capture_options
 import os
 import pwd
 import shutil
@@ -42,7 +42,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import vio_mavlink  # noqa: E402
+import mavlink_bridge  # noqa: E402
 
 # MAVLink values, spelled out so this imports without pymavlink (the tests do).
 SEV_CRITICAL, SEV_ERROR, SEV_WARNING, SEV_INFO = 2, 3, 4, 6
@@ -54,11 +54,11 @@ STOP = {"sig": None}                                  # set by SIGTERM / SIGINT
 
 
 def log(msg):
-    print(f"[vio_flight] {msg}", flush=True)
+    print(f"[flight_supervisor] {msg}", flush=True)
 
 
 def status_of(line):
-    """(severity, STATUSTEXT) for a vio_live.py output line the pilot should see, else None."""
+    """(severity, STATUSTEXT) for a capture_session.py output line the pilot should see, else None."""
     if "FAIL:" in line:
         return SEV_ERROR, "VIO FAIL:" + line.split("FAIL:", 1)[1].rstrip()
     if "auto-exposure:" in line and "->" in line:
@@ -159,7 +159,7 @@ def keep(tmp, dst, user):
 
 
 def run(a, link, sender, user, vio_cmd, n):
-    """One vio_live.py run, until it ends. Returns how many poses reached the FC."""
+    """One capture_session.py run, until it ends. Returns how many poses reached the FC."""
     prefix = new_prefix(a.dir)
     est = os.path.join(a.est_dir, os.path.basename(prefix) + ".est.txt")
     free_gb = shutil.disk_usage(a.dir).free / 1e9
@@ -171,7 +171,7 @@ def run(a, link, sender, user, vio_cmd, n):
     with open(prefix + ".log", "w") as out:
         child = subprocess.Popen(vio_cmd + [prefix, "--est", est] + ([] if record else ["--no-record"]),
                                  stdout=out, stderr=subprocess.STDOUT)
-    output, poses = vio_mavlink.Tail(prefix + ".log"), vio_mavlink.Tail(est)
+    output, poses = mavlink_bridge.Tail(prefix + ".log"), mavlink_bridge.Tail(est)
     got = sent = held = 0
     aligned, align_t, stop_t = False, None, None
     warned = set()
@@ -211,11 +211,11 @@ def run(a, link, sender, user, vio_cmd, n):
             print(report + (f" | {held} held" if held else ""), flush=True)
         if STOP["sig"] is not None and stop_t is None:
             stop_t = time.monotonic()
-            if STOP["sig"] == signal.SIGTERM:         # a tty's Ctrl-C reached vio_live.py already
+            if STOP["sig"] == signal.SIGTERM:         # a tty's Ctrl-C reached capture_session.py already
                 child.send_signal(signal.SIGTERM)
-            log("stopping: waiting for vio_live.py to close its recording")
+            log("stopping: waiting for capture_session.py to close its recording")
         if stop_t is not None and time.monotonic() - stop_t > 80 and child.poll() is None:
-            log("vio_live.py overran its stop; killing it")
+            log("capture_session.py overran its stop; killing it")
             child.kill()
         time.sleep(0.005)
     echo(output.poll())
@@ -226,10 +226,10 @@ def run(a, link, sender, user, vio_cmd, n):
 
 
 def fly(a, link, user, vio_cmd):
-    """One vio_live.py run after another, each once the FC is there, until STOP."""
+    """One capture_session.py run after another, each once the FC is there, until STOP."""
     os.makedirs(a.est_dir, exist_ok=True)
     counter = os.path.join(a.est_dir, "reset_counter")
-    sender = vio_mavlink.Sender(link.conn, a.tilt_deg, not a.upright, reset_counter=load_counter(counter))
+    sender = mavlink_bridge.Sender(link.conn, a.tilt_deg, not a.upright, reset_counter=load_counter(counter))
     n, backoff, waiting = 0, 5.0, False
     while STOP["sig"] is None:
         link.poll()
@@ -259,29 +259,15 @@ def fly(a, link, user, vio_cmd):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dir", default=os.path.join(user.pw_dir, "vio"), help="where runs are recorded")
-    ap.add_argument("--est-dir", default="/run/vio", help="tmpfs for the live estimate files")
-    ap.add_argument("--device", default="/dev/ttyAMA0", help="serial device, or any pymavlink URL")
-    ap.add_argument("--baud", type=int, default=230400, help="must match SERIAL3_BAUD on the FC")
-    ap.add_argument("--tilt-deg", type=float, default=15.0, help="camera pitch below horizontal, degrees")
-    ap.add_argument("--upright", action="store_true",
-                    help="camera image upright on the airframe; this one's is upside down (--expect-accel)")
-    ap.add_argument("--min-free-gb", type=float, default=20.0, help="record only with this much free space")
-    ap.add_argument("--shutter", type=int, help="override camera exposure time in microseconds")
-    ap.add_argument("--gain", type=float, help="analogue gain used with --shutter; default 1")
-    ap.add_argument("--exposure-sweep", action="store_true",
-                    help="select the brightest usable exposure at each VIO run")
-    a = ap.parse_args()
-    if a.gain is not None and a.shutter is None:
-        ap.error("--gain requires --shutter")
+    ap = flight_parser(user.pw_dir, description=__doc__)
+    a = parse_capture_options(ap)
     if os.geteuid() != 0:
-        sys.exit("FAIL: vio_live.py needs root for the IMU: run with sudo (vio@.service does)")
+        sys.exit("FAIL: capture_session.py needs root for the IMU: run with sudo (vio@.service does)")
     if not os.path.isdir(a.dir):
         os.makedirs(a.dir)
         os.chown(a.dir, user.pw_uid, user.pw_gid)
     # vio@.service runs this as root, and pymavlink is usually a --user install of
-    # the account that ran vio_mavlink.py by hand: look there too.
+    # the account that ran mavlink_bridge.py by hand: look there too.
     site = os.path.join(user.pw_dir, ".local", "lib", "python%d.%d" % sys.version_info[:2], "site-packages")
     if os.path.isdir(site):
         sys.path.append(site)
@@ -295,7 +281,7 @@ def main():
         f"{'upright' if a.upright else 'upside-down'}")
     signal.signal(signal.SIGTERM, lambda s, f: STOP.update(sig=s))
     signal.signal(signal.SIGINT, lambda s, f: STOP.update(sig=s))
-    vio_cmd = [sys.executable, "-u", os.path.join(HERE, "vio_live.py")]
+    vio_cmd = [sys.executable, "-u", os.path.join(HERE, "capture_session.py")]
     if a.shutter is not None:
         vio_cmd += ["--shutter", str(a.shutter), "--gain", str(a.gain if a.gain is not None else 1.0)]
     elif a.exposure_sweep:

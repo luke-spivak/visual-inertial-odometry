@@ -570,7 +570,7 @@ raise every mode; spreading the balls raises only the rocking and twist modes.
    side, against 43–49 today.
 
 **Downstream.** New Kalibr camera-IMU run once assembled, then update
-`R_CAM_IMU` in `vio_mavlink.py` and its tests,
+`R_CAM_IMU` in `mavlink_bridge.py` and its tests,
 `openvins/hw_pi/kalibr_imucam_chain.yaml`, the `--expect-accel` values,
 `VISO_POS_X/Y/Z` from the new geometry, and `--tilt-deg` if `TILT` changes.
 

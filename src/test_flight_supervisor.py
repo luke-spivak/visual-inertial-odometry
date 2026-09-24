@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for vio_flight.py's session logic, against a stand-in FC and a stand-in
-vio_live.py. No pymavlink, camera or IMU needed. Runs with plain python3 or pytest.
+"""Tests for flight_supervisor.py's session logic, against a stand-in FC and a stand-in
+capture_session.py. No pymavlink, camera or IMU needed. Runs with plain python3 or pytest.
 
 The one that matters is the restart: a new run's frame has an arbitrary yaw, so its
 poses must not reach an armed aircraft until Viso Align has been accepted for it."""
@@ -13,7 +13,7 @@ import threading
 import time
 import types
 
-import vio_flight as vf
+import flight_supervisor as vf
 
 # Run 1 streams 30 poses and dies, as a crash would; later runs go until SIGTERM.
 FAKE_VIO_LIVE = r'''
@@ -94,7 +94,7 @@ def wait_for(cond, what, timeout=10.0):
 
 def start(tmp, fc, min_free_gb=0.0):
     os.makedirs(os.path.join(tmp, "vio"))
-    fake = os.path.join(tmp, "fake_vio_live.py")
+    fake = os.path.join(tmp, "fake_capture_session.py")
     with open(fake, "w") as f:
         f.write(FAKE_VIO_LIVE)
     a = types.SimpleNamespace(dir=os.path.join(tmp, "vio"), est_dir=os.path.join(tmp, "run"),

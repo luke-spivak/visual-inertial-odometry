@@ -6,9 +6,11 @@ ROS 2 environment for simulation/replay.
 
 ## Runtime and configuration
 
-The live path is `src/vio_flight.py` → `src/vio_live.py` →
-`src/openvins_runner/vio_live.cpp`, with `src/vio_mavlink.py` sending the resulting
+The live path is `src/flight_supervisor.py` → `src/capture_session.py` →
+`src/openvins_runner/sensor_runner.cpp`, with `src/mavlink_bridge.py` sending the resulting
 poses to ArduPilot. `src/imu_log.py` also provides the sensor setup used at runtime.
+See [onboard runtime responsibilities](../src/README.md) for the process layout,
+CLI organization, and ROS tradeoff.
 Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
 
 Simulation configuration is in `sim/config/`; hardware configuration is in
@@ -74,7 +76,9 @@ or restart the systemd service.
 
 ### Migrating the existing Pi service
 
-Earlier deployments ran from `~/harness/`. The new service runs from `~/src/`.
+Earlier deployments ran from `~/harness/` or invoked `~/src/vio_flight.py`.
+The service now invokes `~/src/flight_supervisor.py`. Deploy all runtime Python
+files together, including `cli.py`, before installing the updated unit.
 After deploying, install the new unit **on the Pi**:
 
 ```sh
@@ -90,7 +94,7 @@ Updating this repository alone does not migrate an already installed service.
 For manual live capture on the configured Pi:
 
 ```sh
-sudo python3 ~/src/vio_live.py ~/vio/bench
+sudo python3 ~/src/capture_session.py ~/vio/bench
 ```
 
 To use calibration/diagnostic tools on the Pi, clone this repository there
@@ -98,7 +102,8 @@ or copy `tools/` and `src/` as siblings. Scripts such as
 `tools/calibration/kalibr_capture_imucam.sh` resolve the shared IMU helper
 from `../../src/` relative to their script directory.
 The incremental `tools/deploy/deploy_tracking.sh` remains specific to the existing
-`luke` account and expects the new `~/src/` deployment; use `build_vio.sh`
+`luke` account and requires a complete deployment with the new Python names
+and updated service unit first; use `build_vio.sh`
 for the complete deployment.
 
 ## Simulation and ROS replay

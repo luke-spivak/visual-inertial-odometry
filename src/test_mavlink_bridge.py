@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for vio_mavlink: the frame maths, and the Sender and Tail that
-vio_flight.py reuses. Runs with plain python3 or pytest.
+"""Tests for mavlink_bridge: the frame maths, and the Sender and Tail that
+flight_supervisor.py reuses. Runs with plain python3 or pytest.
 
 The round trip builds the quaternion OpenVINS would report for a known airframe
 attitude, feeds it through pose_to_ned, and requires that attitude back. That
@@ -11,7 +11,7 @@ import os
 import tempfile
 import time
 
-import vio_mavlink as vm
+import mavlink_bridge as vm
 
 
 def rx(a):
@@ -204,7 +204,7 @@ def test_sender_marks_each_new_run_with_a_new_reset_counter():
     now = time.monotonic()
     s.line(_est_line(now))
     s.line(_est_line(now - 0.1))    # vio_live restarted into the same file: time went back
-    s.new_run()                     # vio_flight.py's next run, in a new file
+    s.new_run()                     # flight_supervisor.py's next run, in a new file
     s.line(_est_line(now - 0.2))
     assert [v[-1] for v in mav.vpe] == [0, 1, 2]
 
