@@ -28,7 +28,7 @@ Onboard camera footage showing the visual features OpenVINS tracks to estimate t
 
 | Directory | Contents |
 |---|---|
-| [src/](src/) | Pi flight software, runtime configuration, missions, and tests |
+| [src/](src/) | Pi flight software, runtime configuration, and missions |
 | [tests/](tests/) | Runtime, simulation-frame, and analysis-tool tests |
 | [sim/](sim/) | Gazebo worlds, ROS bridge, simulation configuration and mission scripts |
 | [tools/](tools/README.md) | Calibration, replay, analysis, diagnostics, and build scripts |

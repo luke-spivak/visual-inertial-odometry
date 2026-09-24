@@ -1,27 +1,7 @@
 #!/usr/bin/env python3
-"""
-capture_session.py -- run OpenVINS live on viopi (Phase 4 step 7). With a terminal:
+"""Configure sensors and run one OpenVINS capture session.
 
-    ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1'           # until Ctrl-C
-    ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1 --secs 180'
-
-1. Select exposure using flight.json: sweep (default), auto, or fixed.
-   Auto exposure caps shutter at max_shutter microseconds and makes up the
-   rest with gain; refuses above gain 16. Values go to <out>.exposure.json.
-2. The IMU is set up through imu_log.setup() -- the ODR, ranges and monotonic
-   clock of the calibration run -- but at FIFO watermark 8, so samples reach
-   the estimator ~18 ms after they are taken rather than the ~145 ms that the
-   logger's watermark of 64 costs.
-3. Starts ~/vio_live/vio_live, then rpicam-raw streaming into two FIFOs with
-   --flush (measured: metadata arrives 10 ms after SensorTimestamp).
-4. Records everything to <out>.{y16,meta.json,imu.json,imu_*.bin} unless
-   --no-record, so the same run can be replayed on the VM through
-   vio_bag_from_raw.py + replay_openvins.sh, and the estimate is <out>.est.txt.
-5. vio_live low-passes the IMU at imu_lpf Hz from flight.json (default 50) before OpenVINS,
-   against the motor vibration. The recording stays raw, so a replay is
-   unfiltered unless the replay filters it too.
-6. SIGTERM stops it the way Ctrl-C does, so flight_supervisor.py (started at boot by
-   vio@.service) can stop it and keep the recording.
+Owns camera/estimator processes, recording, and orderly shutdown.
 """
 from cli import parse_options
 from flight_config import save_config
@@ -84,10 +64,7 @@ def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000))
             except OSError: pass
     if not results:
         fail("exposure sweep produced no frames")
-    # Prefer the brightest candidate that remains below the clipping limit.
-    # Choosing the shortest usable exposure made bright outdoor runs needlessly
-    # dark: on run-20260915-173409, 20 us had mean 39 DN while 50 us had mean
-    # 106 DN and still stayed just below the 1% clipping limit.
+    # Maximize usable brightness without saturating more than 1% of pixels.
     usable = [r for r in results if r[1] <= 0.01 and r[2] >= 15]
     chosen = max(usable, key=lambda r: r[2]) if usable else min(results, key=lambda r: r[1])
     print("  exposure sweep: " + ", ".join(f"{s} us={clip*100:.2f}% clip, mean={mean:.1f}"
@@ -101,11 +78,8 @@ def imu_setup(watermark, out):
     missing = {"accel", "gyro"} - set(devs)
     if missing:
         fail(f"missing IIO device(s) {sorted(missing)} -- is st_lsm6dsx loaded?")
-    # One-shot reads before any buffer is enabled. After bench run 1
-    # (2026-09-10) the sensor streamed nothing and single reads returned ~20 g
-    # at rest with the two bytes of every word equal (0x6F6F, 0xAEAE...): its
-    # SPI link or register state had gone bad while the rig was handled on
-    # dupont clips. Refuse rather than spend a run finding that out.
+    # Check the stationary sensor before enabling buffers. Repeated bytes or
+    # implausible gravity can indicate a bad SPI link or sensor register state.
     d = devs["accel"]
     scale = float(imu_log.rd(f"{d}/in_accel_scale"))
     raw = [int(imu_log.rd(f"{d}/in_accel_{ax}_raw")) for ax in "xyz"]
@@ -202,9 +176,8 @@ def main():
     except KeyboardInterrupt:
         interrupted = True   # Ctrl-C (the tty sent SIGINT to rpicam-raw and vio_live too), or SIGTERM
     finally:
-        # A second Ctrl-C used to land here and SIGKILL vio_live before it had
-        # written the recording's metadata (walk2, 2026-09-10: 362 frames, a
-        # stale 236-record meta.json, unreplayable). Shutdown takes seconds.
+        # Let the estimator finish recording metadata; interrupting cleanup can
+        # leave more raw frames than timestamps and make replay impossible.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if interrupted:

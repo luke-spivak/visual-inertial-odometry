@@ -1,26 +1,7 @@
 #!/usr/bin/env python3
-"""
-imu_log.py -- capture ISM330DHCX accel + gyro out of the IIO buffer, with the
-sensor's own timestamps, on CLOCK_MONOTONIC.
+"""Configure Linux IIO sensors and record raw IMU samples for calibration.
 
-Runs on the Pi, as root (sysfs writes).
-
-    sudo ./imu_log.py --check                     # 10k samples + delta histogram
-    sudo ./imu_log.py --hours 3 --out ~/imu/run1  # stationary Allan capture
-
-Writes <out>_accel.bin and <out>_gyro.bin -- raw IIO records, byte for byte as
-the chardev delivered them -- plus <out>.json describing the record layout,
-scales and ODR. tools/calibration/allan.py reads the json.
-
-Two things this deliberately does not do. It does not convert to SI or to CSV
-on the fly: the capture loop should do nothing but drain and write, because a
-stall shows up as a gap in the very data being used to characterise the sensor.
-And it does not average or decimate: allan.py wants every sample.
-
-Why CLOCK_MONOTONIC: Linux IIO defaults to CLOCK_REALTIME, which is
-NTP-disciplined and can step backwards mid-flight. libcamera's SensorTimestamp
-is monotonic (docs/development-log.md, "Timestamps: the highest-risk item"). This is the one
-place the two sensors are put on the same timebase.
+Records include sensor timestamps and a sidecar describing their binary layout.
 """
 
 import argparse
@@ -141,6 +122,7 @@ def setup(dev, odr, accel_range_g, gyro_range_dps, watermark):
 
     wr(f"{bd}/enable", 0)
 
+    # Match camera SensorTimestamp; CLOCK_REALTIME can step with wall-clock sync.
     clk = f"{dev}/current_timestamp_clock"
     if os.path.exists(clk):
         wr(clk, "monotonic")
@@ -199,25 +181,7 @@ def last_ts_in(data, m):
 
 
 def capture(meta, out_prefix, duration_s, sample_target=None, pairs=None):
-    """Drain both chardevs until duration or sample target. Nothing but read and
-    write happens in here, except optionally recording delivery latency.
-
-    `pairs` collects (kind, host_monotonic_ns, newest_sample_ts_ns) per read.
-
-    Two different things come out of it, and they are worth keeping apart.
-
-    Delivery latency (host - ts) is how late userspace sees a sample. It is
-    dominated by the FIFO watermark and costs control-loop latency; it does NOT
-    corrupt timestamps, and it is not what calib_camimu_dt absorbs -- that is
-    the camera-to-IMU timestamp offset, a different quantity.
-
-    Clock skew is the one that bites. Regressing sample timestamps against the
-    host clock gives the ratio between the driver's reconstructed clock and
-    CLOCK_MONOTONIC. The delta histogram cannot see this at all: a driver that
-    subdivides each FIFO batch emits perfectly even deltas whether or not that
-    cadence matches real time. At 0.2% skew a ten-minute flight ends with the
-    IMU and camera over a second apart, which is exactly the unmodelable error
-    this whole timestamp architecture exists to prevent."""
+    """Record raw samples; optionally pair their timestamps with host arrival times."""
     files, fds, counts = {}, {}, {}
     poller = select.poll()
     for kind, m in meta.items():
@@ -250,6 +214,8 @@ def capture(meta, out_prefix, duration_s, sample_target=None, pairs=None):
                         t = last_ts_in(data, meta[kind])
                         if t:
                             pairs.append((kind, host, t))
+                    # Preserve every raw sample for Allan analysis. Conversion or
+                    # decimation here would change the data and delay FIFO draining.
                     files[kind].write(data)
                     counts[kind] += len(data) // rec
 
@@ -336,16 +302,8 @@ def main():
                     help="short run: 10k samples, then timestamp delta stats")
     ap.add_argument("--samples", type=int, default=10000, help="--check sample count")
     ap.add_argument("--odr", type=float, default=416.0)
-    # Allan ranges, not flight ranges, and deliberately narrower.
-    #
-    # Flight wants +/-16 g so vibration peaks cannot clip (camera-imu-bracket-spec
-    # section 8; clipping rectifies into a DC bias and is fatal to preintegration).
-    # But this run is stationary, nothing can clip, and a wide range costs
-    # resolution: at +/-2000 dps the gyro noise floor is only ~1.7 LSB, and
-    # sub-LSB motion gets rounded away rather than measured, so the density comes
-    # out too low. Narrow ranges here give ~6-12 LSB of spread and a clean read.
-    # Noise density is a property of the sensor, not of the range, so the number
-    # transfers to the flight configuration.
+    # Stationary calibration uses narrower ranges to resolve sensor noise above
+    # quantization. Flight needs wider ranges to avoid vibration-induced clipping.
     ap.add_argument("--accel-range", type=float, default=4.0, help="g (Allan run; flight is 16)")
     ap.add_argument("--gyro-range", type=float, default=500.0, help="dps (Allan run; flight is 2000)")
     ap.add_argument("--watermark", type=int, default=64)

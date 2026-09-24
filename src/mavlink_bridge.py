@@ -1,41 +1,7 @@
 #!/usr/bin/env python3
-"""
-mavlink_bridge.py -- stream the Pi's live VIO pose to ArduPilot as
-VISION_POSITION_ESTIMATE over the Pi-FC UART. The Pi runs VIO without ROS, so
-this replaces sim/ros2/vio_bridge on hardware; same idea, extended for a camera
-that is not aligned with the airframe.
+"""Convert OpenVINS estimates to ArduPilot frames and send them over MAVLink.
 
-    sudo python3 capture_session.py ~/vio/f1 --no-record     # writes ~/vio/f1.est.txt
-    python3 mavlink_bridge.py ~/vio/f1.est.txt           # -> /dev/ttyAMA0 @ 230400
-    python3 mavlink_bridge.py --expect-accel             # the pre-flight IMU check
-
-On the aircraft flight_supervisor.py runs both from boot, using the Sender below;
-these are for running by hand.
-
-It follows the estimate file vio_live writes, one line per processed frame
-("timestamp q(JPL xyzw) p v bg ba"). vio_live must flush that file per line
-(sensor_runner.cpp does from 2026-09-11); otherwise poses arrive in 4 KB bursts,
-over a second late, and are dropped here as stale.
-
-FRAMES -- the part most likely to be silently wrong.
-  G  OpenVINS global: gravity-aligned, z up, yaw arbitrary. Treated as ENU;
-     the arbitrary yaw is ArduPilot's job (Viso Align, which only works under
-     VISO_TYPE = 2 -- see fly_sim_mission.py).
-  q  OpenVINS stores JPL q_GtoI, numerically the Hamilton quaternion of R_G_I
-     (IMU vectors -> G). The sim bridge relied on the same identity.
-  I  The ISM330DHCX's reported axes: the camera's optical axes (x right,
-     y image-down, z out of the lens) turned 180 deg about y -- x and z
-     reversed -- plus 1.4 deg. Kalibr 2026-09-14, on the 15-deg sensor plate.
-  B  Airframe FRD. The camera looks forward, pitched TILT nose-down, image top up.
-Sent: position of the IMU in NED, attitude of B in NED, and the IMU's velocity
-in NED as VISION_SPEED_ESTIMATE (for EK3_SRC2/3_VELZ 6; flight.json send_velocity controls it).
-VISO_POS_X/Y/Z tells ArduPilot where the IMU sits, so no lever arm is applied here.
-
-The maths is unit-tested (test_mavlink_bridge.py); the mounting is not, so check
-it on the aircraft before trusting it:
-  1. Level and still, the Pi IMU must read what --expect-accel prints.
-  2. By hand: nose down -> printed pitch goes negative; right side down -> roll
-     goes positive; yaw clockwise seen from above -> yaw grows.
+Also provides estimate-file inspection and mounting diagnostics.
 """
 from cli import parse_options
 import math
@@ -43,11 +9,8 @@ import os
 import pwd
 import time
 
-# Kalibr T_cam_imu rotation (IMU vectors -> camera), default IMU model,
-# results/kalibr_imucam_2026-09-14-camchain-imucam.yaml: 180 deg about the
-# camera's y axis + 1.4 deg, on the 15-deg sensor plate. Valid only while the
-# camera and IMU stay mounted as calibrated; every re-mount so far (2026-09-10,
-# -12, -14) has needed a new run.
+# IMU vectors -> camera optical frame (x right, y down, z forward), from
+# results/kalibr_imucam_2026-09-14-camchain-imucam.yaml. Recalibrate after remounting.
 R_CAM_IMU = (
     (-0.99991866, -0.01269620, 0.00121422),
     (-0.01266913, 0.99971620, 0.02017451),
@@ -105,6 +68,10 @@ def euler_zyx(r):
 
 def pose_to_ned(q_jpl, p_g, tilt_deg, upside_down=False):
     """One OpenVINS pose -> ((north, east, down), (roll, pitch, yaw)) of the airframe."""
+    # OpenVINS JPL q_GtoI is numerically the Hamilton quaternion for IMU -> G.
+    # G is gravity-aligned, z up, with arbitrary yaw; Viso Align supplies heading.
+    # Position is the IMU origin: ArduPilot applies VISO_POS_X/Y/Z, so applying
+    # a lever arm here too would double-count the offset.
     r_g_i = quat_to_R(*q_jpl)
     r_ned_b = matmul(matmul(R_NED_ENU, r_g_i), transpose(R_body_imu(tilt_deg, upside_down)))
     return (p_g[1], p_g[0], -p_g[2]), euler_zyx(r_ned_b)
@@ -226,8 +193,8 @@ class Sender:
             self.mav.mav.vision_position_estimate_send(int(t * 1e6), n, e, d, roll, pitch, yaw,
                                                        NO_COV, self.reset_counter)
             if self.velocity and len(f) >= 11:
-                # The IMU's velocity in G, so no mount rotation. The FC uses what
-                # the EK3_SRCn_VEL* params ask for: VELZ only, with VELXY at 0.
+                # Velocity is expressed in G, so no mount rotation is needed.
+                # Sending all components does not guarantee the FC fuses them.
                 vn, ve, vd = vel_to_ned(tuple(map(float, f[8:11])))
                 self.mav.mav.vision_speed_estimate_send(int(t * 1e6), vn, ve, vd,
                                                         [math.nan] + [0.0] * 8, self.reset_counter)

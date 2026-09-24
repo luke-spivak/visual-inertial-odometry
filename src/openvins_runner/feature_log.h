@@ -1,3 +1,4 @@
+// Record feature snapshots asynchronously without blocking estimator updates on disk I/O.
 #pragma once
 #include <atomic>
 #include <cstdint>

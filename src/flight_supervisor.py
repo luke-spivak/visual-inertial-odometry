@@ -1,35 +1,7 @@
 #!/usr/bin/env python3
-"""
-flight_supervisor.py -- VIO on viopi from power-on to shutdown, nobody logged in. Started
-at boot by vio@.service; replaces ssh, tmux, and capture_session.py + mavlink_bridge.py by hand.
+"""Supervise onboard capture sessions and forward estimates to ArduPilot.
 
-    sudo cp ~/src/vio@.service /etc/systemd/system/     # once
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now vio@$USER
-    journalctl -u vio@$USER -f                               # watch it
-    sudo systemctl stop vio@$USER                            # bench work: frees camera and IMU
-
-1. Waits for the FC's heartbeat, so a Pi on the bench with the FC unpowered
-   leaves the camera and IMU alone.
-2. Runs capture_session.py into ~/vio/run-<date>-<time> as by hand: exposure probe, IMU,
-   estimator, recording. Recording is ~2.5 GB/min (41 MB/s of Y16) and now happens
-   at every power-up, so below flight.json min_free_gb a run goes --no-record. The estimate
-   file stays on tmpfs until the run ends: poses reach the FC through it, and a
-   full SD card must cost the recording, not the flight.
-3. Sends each pose with mavlink_bridge.py's Sender, the mount from flight.json
-   (camera 15 deg nose-down, image upside down).
-4. Passes on what matters in capture_session.py's output -- exposure, INITIALIZED, first
-   visual update, FAIL -- as STATUSTEXT, which QGC shows when connected. The
-   journal has all of it.
-5. Viso Align at the first pose of every run, while disarmed. The FC aligns by
-   itself only at the first pose after its own boot (_align_yaw starts true in
-   AP_VisualOdom_IntelT265), and a restarted run's yaw is arbitrary. Until a run
-   is aligned its poses are held back from an armed aircraft. (The FC's pre-arm
-   check also refuses more than 10 deg between VIO and AHRS yaw.)
-6. When capture_session.py ends, starts a new run with the reset counter bumped, so the
-   EKF resets to the new frame instead of rejecting it.
-7. SIGTERM -- shutdown, the Pi's power button, systemctl stop -- goes on to
-   capture_session.py, which stops the camera and lets vio_live close the recording.
+Waits for the flight controller, aligns new estimator frames, and restarts capture.
 """
 from cli import parse_options
 from flight_config import save_config
@@ -162,6 +134,7 @@ def keep(tmp, dst, user):
 def run(a, link, sender, user, vio_cmd, n):
     """One capture_session.py run, until it ends. Returns how many poses reached the FC."""
     prefix = new_prefix(a.recording_dir)
+    # Keep live poses on tmpfs so recording capacity does not gate pose delivery.
     est = os.path.join(a.estimate_dir, os.path.basename(prefix) + ".est.txt")
     free_gb = shutil.disk_usage(a.recording_dir).free / 1e9
     record = free_gb >= a.min_free_gb
@@ -193,6 +166,8 @@ def run(a, link, sender, user, vio_cmd, n):
         echo(output.poll())
         for line in poses.poll():
             got += 1
+            # Every restart creates an arbitrary yaw frame. Withhold its poses
+            # from an armed FC until disarmed alignment has been acknowledged.
             if aligned or link.disarmed():
                 sent += sender.line(line)
             else:
@@ -248,6 +223,7 @@ def fly(a, link, user, vio_cmd):
         waiting = False
         n += 1
         if n > 1:
+            # Tell the FC the estimator frame reset, rather than presenting a jump.
             sender.new_run()
         with open(counter, "w") as f:
             f.write(str(sender.reset_counter))

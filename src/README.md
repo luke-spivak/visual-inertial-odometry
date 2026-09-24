@@ -96,3 +96,24 @@ OpenVINS YAML. Manual capture now uses the flight exposure sweep by default,
 and bridge diagnostics use the flight's upside-down mount instead of an upright
 default. Update the JSON for a different setup. The standalone IMU calibration
 logger and internal C++ runner interfaces are unchanged.
+
+## Hardware checks and recordings
+
+Before flight, compare the stationary IMU reading with
+`mavlink_bridge.py --expect-accel`. A software transform test cannot verify the physical mount.
+By hand, nose-down should produce negative pitch, right-side-down positive roll,
+and clockwise yaw viewed from above increasing yaw. ArduPilot must align the
+estimator's arbitrary heading; this integration uses `VISO_TYPE=2`.
+
+For standalone IMU timing checks or stationary calibration on the Pi:
+
+```sh
+sudo python3 src/imu_log.py --check
+sudo python3 src/imu_log.py --hours 3 --out ~/imu/run1
+```
+
+Capture sessions record raw camera/IMU data plus timestamps and configuration
+sidecars for offline replay. The live estimator filters IMU samples, while the
+recording remains unfiltered; replay must apply the same filtering for comparison.
+Historical measurements and debugging investigations remain in the
+[development log](../docs/development-log.md).

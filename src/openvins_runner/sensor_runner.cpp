@@ -1,29 +1,5 @@
-// sensor_runner.cpp -- OpenVINS running live on viopi. No ROS.
-//
-// Started by src/capture_session.py, which configures the IIO devices, starts
-// rpicam-raw and hands this program:
-//   --imu FILE     one line per sensor: kind chardev record_bytes scale ts_off x_off y_off z_off
-//   --frames FIFO  rpicam-raw -o: raw Y16 frames, 8-bit data in the high byte
-//   --meta FIFO    rpicam-raw --metadata (json): one record per frame, in order
-//   --config YAML  OpenVINS estimator_config.yaml (Kalibr chain files beside it)
-//   --out FILE     state per processed frame: t q(JPL xyzw) p v bg ba, the column
-//                  layout of OpenVINS's save_total_state, so vio_closure.py reads it
-//   --record PFX   optional: write PFX.y16, PFX.meta.json, PFX.imu_{accel,gyro}.bin
-//                  in the capture script's format, so vio_bag_from_raw.py can
-//                  replay this exact run offline on the VM. The IMU is recorded
-//                  raw, before the low-pass below.
-//   --imu-lpf HZ   optional: low-pass the IMU at HZ before OpenVINS sees it
-//                  (2nd-order Butterworth, designed at --imu-rate, default 440 Hz,
-//                  the rate the part delivers at ODR 416). See ImuLowPass.
-//
-// Threads mirror OpenVINS's own ROS 2 node (ROS2Visualizer): IMU samples are fed
-// as they arrive; a camera frame is processed once the IMU has passed its
-// timestamp (minus the estimated camera-IMU offset), on a separate thread so
-// IMU reading never waits on an update.
-//
-// Timestamps: IIO samples and SensorTimestamp are both CLOCK_MONOTONIC (udev
-// rule + patched driver; libcamera natively). The only offset applied here is
-// the low-pass's group delay, taken off the IMU timestamps.
+// Feed Linux IIO IMU samples and timestamped camera frames to OpenVINS.
+// Capture sessions own process setup; this runner owns updates and recordings.
 
 #include <fcntl.h>
 #include <poll.h>
@@ -108,17 +84,9 @@ struct ImuDev {
   FILE *rec_fp = nullptr;
 };
 
-// The motors shake the sensor plate at their rotation rate, 176-195 Hz in a
-// hover, and the grommet mount passes about a third of it: 6-7 m/s^2 RMS per
-// axis in flight against 0.01 at rest (docs/development-log.md, VIO alongside GPS). The
-// filter's noise model is ~0.06 m/s^2 per sample, so it would trust the IMU
-// ~100x beyond what it gets. Everything VIO needs sits below ~20 Hz, so a
-// 50 Hz low-pass costs nothing in band (gain 0.99 at 20 Hz) and cuts 188 Hz
-// 133x -- the bilinear transform steepens it near Nyquist.
-//
-// Its price is delay: ~4.3 ms at 50 Hz, 4.3-4.9 ms across 0-20 Hz. The DC
-// value is taken off every IMU timestamp so filtered samples line up with the
-// camera; OpenVINS's online time-offset calibration takes up the rest.
+// Suppress motor vibration above the useful motion band. Subtract the filter's
+// DC group delay from IMU timestamps to keep filtered samples aligned with the
+// camera; online time-offset calibration handles the residual frequency dependence.
 struct ImuLowPass {
   bool on = false;
   double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
@@ -199,24 +167,14 @@ struct Shared {
   std::atomic<int64_t> last_imu_ns{0};
   std::atomic<long> imu_n{0}, frames_in{0}, frames_done_n{0}, frames_dropped{0};
   std::atomic<double> upd_ms_sum{0}, upd_ms_max{0}, lag_ms_last{0};
-  // IMU-path diagnostics. Bench run 1 (2026-09-10): IMU samples stopped
-  // reaching this program 15 s in while the IMU interrupt kept firing at
-  // 440/s. These say which side went quiet: the IMU thread (heartbeat age),
-  // OpenVINS's feed (feed max), or the kernel buffer (kbuf fill).
+  // Distinguish a stalled reader from a blocked estimator feed or kernel backlog.
   std::atomic<int64_t> imu_loop_ns{0};
   std::atomic<double> feed_ms_max{0}, read_gap_ms_max{0};
 
-  // OpenVINS logs why initialisation is failing only at INFO, which after
-  // initialisation is ~6 lines per frame. Run at INFO until initialised, then
-  // drop to the requested level (walk2, 2026-09-10: a stuck init with the
-  // reason invisible at WARNING).
+  // Initialization failures are only visible at INFO; reduce logging afterward.
   std::string run_verbosity = "WARNING";
-  // OpenVINS's own initialisation (initialized_time() > 0). Distinct from
-  // initialized(), which also needs one full update: with ZUPT on, every frame
-  // at rest is a zero-velocity update that returns before the full update
-  // (VioManager.cpp:299-304, timelastupdate set only at :651), so at rest
-  // initialized() stays false however long the rig waits. walk2 (2026-09-10)
-  // sat 16 s initialised, reporting "not initialized", waiting to be lifted.
+  // initialized() also requires a full visual update. ZUPT can keep an already
+  // initialized stationary estimator from reaching that update, so track both.
   std::atomic<bool> vio_init{false};
 
   std::mutex st_mtx;  // last reported state, for the stats line and summary
@@ -265,6 +223,7 @@ static void imu_thread(Shared &S, std::vector<ImuDev> &devs) {
         if ((t - last_data) * 1e-6 > S.read_gap_ms_max) S.read_gap_ms_max = (t - last_data) * 1e-6;
         last_data = t;
       }
+      // Preserve raw samples for replay before filtering or shifting timestamps.
       if (d.rec_fp) fwrite(buf.data(), 1, size_t(n), d.rec_fp);
       for (ssize_t o = 0; o < n; o += d.rec) {
         int64_t t;
@@ -394,6 +353,8 @@ static void update_thread(Shared &S, FILE *out) {
     CapturedFrame captured;
     {
       std::unique_lock<std::mutex> lk(S.q_mtx);
+      // Both streams use CLOCK_MONOTONIC. Wait for IMU coverage through the
+      // camera time plus the estimated offset; camera updates run off the IMU thread.
       auto ready = [&] { return !S.cam_q.empty() && S.cam_q.front().camera.timestamp < S.last_imu_ns * 1e-9 - calib_dt; };
       S.q_cv.wait_for(lk, std::chrono::milliseconds(100), [&] { return ready() || S.frames_done; });
       if (!ready()) {
@@ -431,11 +392,8 @@ static void update_thread(Shared &S, FILE *out) {
 
     auto state = S.sys->get_state();
     calib_dt = state->_calib_dt_CAMtoIMU->value()(0);
-    // Poses go out from OpenVINS's own initialisation, not from initialized(),
-    // which also waits for a full visual update that ZUPT at rest never allows.
-    // At rest the ZUPT-held state (still, gravity-aligned) is the right answer,
-    // and ArduPilot will not arm under VISO_TYPE 2 until poses arrive: gating on
-    // initialized() meant lifting the aircraft after INITIALIZED (2026-09-14).
+    // Publish the initialized ZUPT state at rest. Waiting for a full visual
+    // update would withhold the poses ArduPilot needs for its pre-arm check.
     if (!S.vio_init) continue;
     static bool first_update = false;
     if (!first_update && S.sys->initialized()) {
