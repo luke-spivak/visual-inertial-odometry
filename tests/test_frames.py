@@ -6,17 +6,14 @@ Every case is a physical attitude described twice: once in ROS convention
 composition order, a missing conjugate, or a swapped quaternion convention
 fails at least one of these.
 
-Run:  cd ~/ws_vio/src/vio_bridge && python3 -m pytest test/test_frames.py -v
+Run from the repository root: python3 -m pytest tests/test_frames.py -v
 """
 import math
-import os
 import sys
 
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from vio_bridge.frames import (  # noqa: E402
+from vio_bridge.frames import (
     orientation_enu_flu_to_ned_frd,
     position_enu_to_ned,
 )

@@ -28,7 +28,7 @@ reorganization; commands in this guide use the current layout.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r tools/requirements-test.txt
-python -m pytest -q src tools/tracking/test_render_tracking.py sim/ros2/vio_bridge/test
+python -m pytest -q
 ```
 
 The test dependencies cover coordinate transforms, session management, and
@@ -40,7 +40,7 @@ The feature logger also has a standalone C++17 test:
 
 ```sh
 c++ -std=c++17 -pthread -I src/openvins_runner \
-  src/openvins_runner/test_feature_log.cpp -o /tmp/vio-feature-log-test
+  tests/test_feature_log.cpp -o /tmp/vio-feature-log-test
 /tmp/vio-feature-log-test /tmp/vio-feature-log-test.jsonl
 ```
 

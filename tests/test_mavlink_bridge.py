@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for mavlink_bridge: the frame maths, and the Sender and Tail that
-flight_supervisor.py reuses. Runs with plain python3 or pytest.
+flight_supervisor.py reuses. Run with python3 -m pytest from the repository root.
 
 The round trip builds the quaternion OpenVINS would report for a known airframe
 attitude, feeds it through pose_to_ned, and requires that attitude back. That

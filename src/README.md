@@ -1,7 +1,8 @@
 # Onboard runtime
 
 Start with `flight_supervisor.py` for unattended flight, or `capture_session.py`
-for a single bench capture. Each command supports `--help`.
+for a single bench capture. Each command supports `--help`. Tests live in
+[`../tests/`](../tests/); run `python3 -m pytest -q` from the repository root.
 
 | File | Responsibility |
 |---|---|

@@ -38,7 +38,7 @@ python3 tools/sensors/focus_check.py --help
 python tools/calibration/kalibr_compare.py camchain.yaml --reference reference.yaml
 
 # Run the standalone desktop test suite.
-python -m pytest -q src tools/tracking/test_render_tracking.py sim/ros2/vio_bridge/test
+python -m pytest -q
 ```
 
 Build and deployment commands are in the [setup guide](../docs/setup.md#raspberry-pi).

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for flight_supervisor.py's session logic, against a stand-in FC and a stand-in
-capture_session.py. No pymavlink, camera or IMU needed. Runs with plain python3 or pytest.
+capture_session.py. No pymavlink, camera or IMU needed. Run with python3 -m pytest from the repository root.
 
 The one that matters is the restart: a new run's frame has an arbitrary yaw, so its
 poses must not reach an armed aircraft until Viso Align has been accepted for it."""
