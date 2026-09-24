@@ -8,7 +8,7 @@ ROS 2 environment for simulation/replay.
 
 The live path is `src/flight_supervisor.py` → `src/capture_session.py` →
 `src/openvins_runner/sensor_runner.cpp`, with `src/mavlink_bridge.py` sending the resulting
-poses to ArduPilot. `src/imu_log.py` also provides the sensor setup used at runtime.
+poses to ArduPilot. `src/imu_device.py` also provides the sensor setup used at runtime.
 See [onboard runtime responsibilities](../src/README.md) for the process layout,
 CLI organization, and ROS tradeoff.
 Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
@@ -106,9 +106,8 @@ for settings, alternative bench configurations, and diagnostic commands.
 Incremental tracking deployment updates code but preserves the deployed JSON.
 
 To use calibration/diagnostic tools on the Pi, clone this repository there
-or copy `tools/` and `src/` as siblings. Scripts such as
-`tools/calibration/kalibr_capture_imucam.sh` resolve the shared IMU helper
-from `../../src/` relative to their script directory.
+or copy `tools/` and `src/` as siblings. The standalone recorder is `tools/sensors/imu_log.py`; it imports the shared
+`src/imu_device.py`. Calibration and sensor-check scripts use that recorder.
 The incremental `tools/deploy/deploy_tracking.sh` remains specific to the existing
 `luke` account and requires a complete deployment with the new Python names
 and updated service unit first; use `build_vio.sh`

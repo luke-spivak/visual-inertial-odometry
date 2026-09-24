@@ -12,7 +12,7 @@ for a single bench capture. Each command supports `--help`. Tests live in
 | `openvins_runner/sensor_runner.cpp` | Read IIO IMU samples and camera FIFOs, schedule OpenVINS updates, and write estimates and recordings. |
 | `cli.py` | Expose the small flight, bench, and diagnostic command interfaces. |
 | `flight_config.py` | Load, validate, and snapshot aircraft settings. |
-| `imu_log.py` | Shared IIO discovery/setup/teardown plus a standalone IMU recorder. |
+| `imu_device.py` | Shared IIO discovery, setup, layout parsing, and teardown. |
 | `config/` | Flight settings (`flight.json`), OpenVINS settings, and camera/IMU calibration. |
 
 ## Process and data flow
@@ -108,8 +108,8 @@ estimator's arbitrary heading; this integration uses `VISO_TYPE=2`.
 For standalone IMU timing checks or stationary calibration on the Pi:
 
 ```sh
-sudo python3 src/imu_log.py --check
-sudo python3 src/imu_log.py --hours 3 --out ~/imu/run1
+sudo python3 tools/sensors/imu_log.py --check
+sudo python3 tools/sensors/imu_log.py --hours 3 --out ~/imu/run1
 ```
 
 Capture sessions record raw camera/IMU data plus timestamps and configuration

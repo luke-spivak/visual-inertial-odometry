@@ -9,7 +9,7 @@ import json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import imu_log  # noqa: E402
+import imu_device  # noqa: E402
 
 W, H = 1280, 800
 
@@ -74,15 +74,15 @@ def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000))
 
 
 def imu_setup(watermark, out):
-    devs = imu_log.find_devices()
+    devs = imu_device.find_devices()
     missing = {"accel", "gyro"} - set(devs)
     if missing:
         fail(f"missing IIO device(s) {sorted(missing)} -- is st_lsm6dsx loaded?")
     # Check the stationary sensor before enabling buffers. Repeated bytes or
     # implausible gravity can indicate a bad SPI link or sensor register state.
     d = devs["accel"]
-    scale = float(imu_log.rd(f"{d}/in_accel_scale"))
-    raw = [int(imu_log.rd(f"{d}/in_accel_{ax}_raw")) for ax in "xyz"]
+    scale = float(imu_device.rd(f"{d}/in_accel_scale"))
+    raw = [int(imu_device.rd(f"{d}/in_accel_{ax}_raw")) for ax in "xyz"]
     norm = sum((v * scale) ** 2 for v in raw) ** 0.5
     doubled = all(((v & 0xFFFF) >> 8) == (v & 0xFF) for v in raw)
     print(f"  imu: one-shot |accel| {norm:.2f} m/s^2")
@@ -90,7 +90,7 @@ def imu_setup(watermark, out):
         fail(f"IMU reads garbage (raw {raw}, |accel| {norm:.1f} m/s^2, hold the rig still)"
              + (" -- every word has equal bytes: SPI link or register state is bad. Reseat the wires, "
                 "power-cycle the Pi (a reboot keeps 3.3 V up), retest with imu_irq_check.sh" if doubled else ""))
-    meta = {k: imu_log.setup(p, 416, 16, 2000, watermark) for k, p in devs.items()}
+    meta = {k: imu_device.setup(p, 416, 16, 2000, watermark) for k, p in devs.items()}
     lines = []
     for kind, m in meta.items():
         if m["timestamp_clock"] != "monotonic":
@@ -203,7 +203,7 @@ def main():
                                "camera_exit": cam.returncode if cam else None}, marker)
             except OSError as e:
                 print(f"Could not write completion marker: {e}")
-        imu_log.teardown(devs.values())
+        imu_device.teardown(devs.values())
         shutil.rmtree(fdir, ignore_errors=True)
         for f in os.listdir(os.path.dirname(out)):
             if f.startswith(os.path.basename(out) + "."):

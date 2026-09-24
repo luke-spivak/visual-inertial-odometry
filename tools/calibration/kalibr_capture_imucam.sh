@@ -51,7 +51,7 @@ PY
 
 IMU_MIN=$(python3 -c "print(($SECS + 6) / 60)")
 echo "=== IMU logging starts; camera in 2 s -- start moving the rig ==="
-sudo python3 "$HERE/../../src/imu_log.py" --minutes "$IMU_MIN" --odr 416 \
+sudo python3 "$HERE/../sensors/imu_log.py" --minutes "$IMU_MIN" --odr 416 \
      --accel-range 16 --gyro-range 2000 --out "$OUT.imu" > "$OUT.imu.log" 2>&1 &
 IMU_PID=$!
 sleep 2
