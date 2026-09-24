@@ -9,9 +9,10 @@ for a single bench capture. Each command supports `--help`.
 | `capture_session.py` | Configure exposure and IMU, launch the camera and C++ runner, and close recordings on shutdown. Runs independently for bench work. |
 | `mavlink_bridge.py` | Convert estimates into ArduPilot frames, reject stale poses, and send MAVLink. Imported by the supervisor; also runnable for diagnostics. |
 | `openvins_runner/sensor_runner.cpp` | Read IIO IMU samples and camera FIFOs, schedule OpenVINS updates, and write estimates and recordings. |
-| `cli.py` | Define command-line interfaces, shared option groups, and exposure validation. |
+| `cli.py` | Expose the small flight, bench, and diagnostic command interfaces. |
+| `flight_config.py` | Load, validate, and snapshot aircraft settings. |
 | `imu_log.py` | Shared IIO discovery/setup/teardown plus a standalone IMU recorder. |
-| `config/` | OpenVINS settings and camera/IMU calibration. |
+| `config/` | Flight settings (`flight.json`), OpenVINS settings, and camera/IMU calibration. |
 
 ## Process and data flow
 
@@ -54,7 +55,43 @@ The compiled executable and bundle directory remain `~/vio_live/vio_live` and
 names; update manual commands and reinstall the service unit when deploying.
 See [setup](../docs/setup.md) for migration steps. Historical logs keep old names.
 
-CLI flags and defaults are preserved, including the supervisor's upside-down
-mount default and the diagnostic bridge's upright default. Both capture and
-supervision reject `--gain` without `--shutter`, and now both reject combining
-`--shutter` with `--exposure-sweep` before accessing hardware.
+## Flight configuration and bench commands
+
+`config/flight.json` is the single source for aircraft runtime settings. It
+preserves the deployed service's 20 fps capture, exposure sweep, 50 Hz IMU
+filter, 230400 baud link, 15-degree upside-down mount, 0.5-second pose-age limit,
+and 20 GB minimum recording space. Estimator calibration remains in OpenVINS
+YAML; `estimator_config` points to it rather than duplicating it.
+
+The service loads this file once. Each capture session receives a resolved
+`<prefix>.flight.json` snapshot; restart the supervisor to apply settings changes.
+Bench capture writes the same snapshot, even without raw recording. Missing,
+unknown, mistyped, and invalid settings fail before hardware access.
+
+```sh
+sudo python3 src/flight_supervisor.py
+sudo python3 src/capture_session.py ~/vio/bench --secs 30 --no-record
+python3 src/mavlink_bridge.py --expect-accel
+python3 src/mavlink_bridge.py ~/vio/bench.est.txt --dry-run
+```
+
+All commands accept `--config PATH` for a complete alternative flight JSON.
+For an experiment, copy the file and change its settings; there are no separate
+CLI overrides for exposure, mounting, serial settings, or estimator paths.
+The supervisor privately supplies the capture estimate path on tmpfs.
+
+`exposure_mode` is `sweep`, `auto`, or `fixed`. `max_shutter` caps auto exposure;
+`shutter` (microseconds) and `gain` apply in fixed mode. `imu_lpf` is in Hz,
+`tilt_deg` in degrees below horizontal, and `max_lag` in seconds (zero disables
+stale-pose rejection for offline diagnostics). `min_free_gb` uses decimal GB.
+`send_velocity` controls velocity messages alongside position. `verbosity`
+selects the OpenVINS print level.
+
+Relative filesystem paths resolve beside the selected JSON file. `~/` resolves
+to the operating user's home, including under sudo; serial URLs are unchanged.
+
+This replaces the earlier large CLIs. `--config` now selects flight JSON, not
+OpenVINS YAML. Manual capture now uses the flight exposure sweep by default,
+and bridge diagnostics use the flight's upside-down mount instead of an upright
+default. Update the JSON for a different setup. The standalone IMU calibration
+logger and internal C++ runner interfaces are unchanged.

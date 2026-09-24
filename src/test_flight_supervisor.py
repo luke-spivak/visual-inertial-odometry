@@ -5,15 +5,16 @@ capture_session.py. No pymavlink, camera or IMU needed. Runs with plain python3 
 The one that matters is the restart: a new run's frame has an arbitrary yaw, so its
 poses must not reach an armed aircraft until Viso Align has been accepted for it."""
 import os
+import json
 import pwd
 import signal
 import sys
 import tempfile
 import threading
 import time
-import types
 
 import flight_supervisor as vf
+from cli import parse_options
 
 # Run 1 streams 30 poses and dies, as a crash would; later runs go until SIGTERM.
 FAKE_VIO_LIVE = r'''
@@ -97,8 +98,9 @@ def start(tmp, fc, min_free_gb=0.0):
     fake = os.path.join(tmp, "fake_capture_session.py")
     with open(fake, "w") as f:
         f.write(FAKE_VIO_LIVE)
-    a = types.SimpleNamespace(dir=os.path.join(tmp, "vio"), est_dir=os.path.join(tmp, "run"),
-                              device="fake", tilt_deg=15.0, upright=False, min_free_gb=min_free_gb)
+    a = parse_options("flight", tmp, [])
+    a.recording_dir, a.estimate_dir = os.path.join(tmp, "vio"), os.path.join(tmp, "run")
+    a.device, a.min_free_gb = "fake", min_free_gb
     vf.STOP["sig"] = None
     t = threading.Thread(target=vf.fly, args=(a, vf.Link(fc), pwd.getpwuid(os.getuid()),
                                               [sys.executable, "-u", fake]))
@@ -113,7 +115,7 @@ def stop(t):
 
 
 def files(a, suffix):
-    return sorted(f for f in os.listdir(a.dir) if f.endswith(suffix))
+    return sorted(f for f in os.listdir(a.recording_dir) if f.endswith(suffix))
 
 
 def test_a_restarted_run_reaches_an_armed_aircraft_only_once_aligned():
@@ -141,12 +143,12 @@ def test_a_restarted_run_reaches_an_armed_aircraft_only_once_aligned():
             stop(t)
         # Each run left its estimate beside its recording, nothing on tmpfs.
         assert len(files(a, ".est.txt")) == 2 and len(files(a, ".log")) == 2
-        assert os.listdir(a.est_dir) == ["reset_counter"]
-        with open(os.path.join(a.est_dir, "reset_counter")) as f:
+        assert os.listdir(a.estimate_dir) == ["reset_counter"]
+        with open(os.path.join(a.estimate_dir, "reset_counter")) as f:
             assert f.read() == "1"
-        with open(os.path.join(a.dir, files(a, ".est.txt")[0])) as f:
+        with open(os.path.join(a.recording_dir, files(a, ".est.txt")[0])) as f:
             assert len(f.readlines()) == 31                 # header + 30 poses
-        with open(os.path.join(a.dir, files(a, ".args")[0])) as f:
+        with open(os.path.join(a.recording_dir, files(a, ".args")[0])) as f:
             assert "--est" in f.read()
         for expected in ("VIO exposure fixed 4000 us, gain 2.25", "VIO initialized",
                          "VIO run 1 ended: exit 3, 30 poses"):
@@ -164,8 +166,15 @@ def test_waits_for_the_fc_and_skips_recording_when_short_of_space():
             assert not files(a, ".args")                    # no FC, no run
             fc.alive = True
             wait_for(lambda: files(a, ".args"), "run 1 to start")
-            with open(os.path.join(a.dir, files(a, ".args")[0])) as f:
-                assert "--no-record" in f.read()
+            with open(os.path.join(a.recording_dir, files(a, ".args")[0])) as f:
+                args = f.read().split()
+            assert "--no-record" in args
+            config_path = args[args.index("--config") + 1]
+            with open(config_path) as snapshot:
+                config = json.load(snapshot)
+            assert config["exposure_mode"] == "sweep"
+            assert config["upside_down"] is True
+            assert config["recording_dir"] == a.recording_dir
             assert any(x.startswith("VIO run 1 NOT recording") for x in fc.texts)
         finally:
             stop(t)

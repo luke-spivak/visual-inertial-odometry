@@ -13,10 +13,10 @@ at boot by vio@.service; replaces ssh, tmux, and capture_session.py + mavlink_br
    leaves the camera and IMU alone.
 2. Runs capture_session.py into ~/vio/run-<date>-<time> as by hand: exposure probe, IMU,
    estimator, recording. Recording is ~2.5 GB/min (41 MB/s of Y16) and now happens
-   at every power-up, so below --min-free-gb a run goes --no-record. The estimate
+   at every power-up, so below flight.json min_free_gb a run goes --no-record. The estimate
    file stays on tmpfs until the run ends: poses reach the FC through it, and a
    full SD card must cost the recording, not the flight.
-3. Sends each pose with mavlink_bridge.py's Sender, this aircraft's mount baked in
+3. Sends each pose with mavlink_bridge.py's Sender, the mount from flight.json
    (camera 15 deg nose-down, image upside down).
 4. Passes on what matters in capture_session.py's output -- exposure, INITIALIZED, first
    visual update, FAIL -- as STATUSTEXT, which QGC shows when connected. The
@@ -31,7 +31,8 @@ at boot by vio@.service; replaces ssh, tmux, and capture_session.py + mavlink_br
 7. SIGTERM -- shutdown, the Pi's power button, systemctl stop -- goes on to
    capture_session.py, which stops the camera and lets vio_live close the recording.
 """
-from cli import flight_parser, parse_capture_options
+from cli import parse_options
+from flight_config import save_config
 import os
 import pwd
 import shutil
@@ -160,16 +161,20 @@ def keep(tmp, dst, user):
 
 def run(a, link, sender, user, vio_cmd, n):
     """One capture_session.py run, until it ends. Returns how many poses reached the FC."""
-    prefix = new_prefix(a.dir)
-    est = os.path.join(a.est_dir, os.path.basename(prefix) + ".est.txt")
-    free_gb = shutil.disk_usage(a.dir).free / 1e9
+    prefix = new_prefix(a.recording_dir)
+    est = os.path.join(a.estimate_dir, os.path.basename(prefix) + ".est.txt")
+    free_gb = shutil.disk_usage(a.recording_dir).free / 1e9
     record = free_gb >= a.min_free_gb
     log(f"run {n}: {prefix}, reset counter {sender.reset_counter}")
     link.say(SEV_INFO if record else SEV_WARNING,
              f"VIO run {n} " + (f"recording, {free_gb:.0f} GB free" if record
                                 else f"NOT recording: {free_gb:.0f} GB free"))
+    # Pin each child to the settings loaded by this supervisor, even if the
+    # source config is edited before a restart. The snapshot also supports replay.
+    config_path = prefix + ".flight.json"
+    save_config(a, config_path)
     with open(prefix + ".log", "w") as out:
-        child = subprocess.Popen(vio_cmd + [prefix, "--est", est] + ([] if record else ["--no-record"]),
+        child = subprocess.Popen(vio_cmd + [prefix, "--config", config_path, "--est", est] + ([] if record else ["--no-record"]),
                                  stdout=out, stderr=subprocess.STDOUT)
     output, poses = mavlink_bridge.Tail(prefix + ".log"), mavlink_bridge.Tail(est)
     got = sent = held = 0
@@ -227,9 +232,10 @@ def run(a, link, sender, user, vio_cmd, n):
 
 def fly(a, link, user, vio_cmd):
     """One capture_session.py run after another, each once the FC is there, until STOP."""
-    os.makedirs(a.est_dir, exist_ok=True)
-    counter = os.path.join(a.est_dir, "reset_counter")
-    sender = mavlink_bridge.Sender(link.conn, a.tilt_deg, not a.upright, reset_counter=load_counter(counter))
+    os.makedirs(a.estimate_dir, exist_ok=True)
+    counter = os.path.join(a.estimate_dir, "reset_counter")
+    sender = mavlink_bridge.Sender(link.conn, a.tilt_deg, a.upside_down, a.send_velocity, a.max_lag,
+                                    reset_counter=load_counter(counter))
     n, backoff, waiting = 0, 5.0, False
     while STOP["sig"] is None:
         link.poll()
@@ -259,13 +265,12 @@ def fly(a, link, user, vio_cmd):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    ap = flight_parser(user.pw_dir, description=__doc__)
-    a = parse_capture_options(ap)
+    a = parse_options("flight", user.pw_dir)
     if os.geteuid() != 0:
         sys.exit("FAIL: capture_session.py needs root for the IMU: run with sudo (vio@.service does)")
-    if not os.path.isdir(a.dir):
-        os.makedirs(a.dir)
-        os.chown(a.dir, user.pw_uid, user.pw_gid)
+    if not os.path.isdir(a.recording_dir):
+        os.makedirs(a.recording_dir)
+        os.chown(a.recording_dir, user.pw_uid, user.pw_gid)
     # vio@.service runs this as root, and pymavlink is usually a --user install of
     # the account that ran mavlink_bridge.py by hand: look there too.
     site = os.path.join(user.pw_dir, ".local", "lib", "python%d.%d" % sys.version_info[:2], "site-packages")
@@ -277,15 +282,11 @@ def main():
     except ImportError:
         sys.exit(f"FAIL: no pymavlink for root or {user.pw_name}: pip install pymavlink as {user.pw_name}")
     conn = mavutil.mavlink_connection(a.device, baud=a.baud, source_system=1, source_component=197)
-    log(f"MAVLink {a.device} @ {a.baud}; runs in {a.dir}; camera {a.tilt_deg:g} deg nose-down, "
-        f"{'upright' if a.upright else 'upside-down'}")
+    log(f"MAVLink {a.device} @ {a.baud}; runs in {a.recording_dir}; camera {a.tilt_deg:g} deg nose-down, "
+        f"{'upside-down' if a.upside_down else 'upright'}")
     signal.signal(signal.SIGTERM, lambda s, f: STOP.update(sig=s))
     signal.signal(signal.SIGINT, lambda s, f: STOP.update(sig=s))
     vio_cmd = [sys.executable, "-u", os.path.join(HERE, "capture_session.py")]
-    if a.shutter is not None:
-        vio_cmd += ["--shutter", str(a.shutter), "--gain", str(a.gain if a.gain is not None else 1.0)]
-    elif a.exposure_sweep:
-        vio_cmd += ["--exposure-sweep"]
     fly(a, Link(conn), user, vio_cmd)
 
 

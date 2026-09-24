@@ -62,10 +62,12 @@ mkdir -p "$REPO/$B/bundle/config"
 cp "$REPO"/src/config/*.yaml "$REPO/$B/bundle/config/"
 echo "  bundle: vio_live + $(ls "$REPO/$B/bundle/lib" | wc -l | tr -d ' ') libs ($n the Pi lacked), $(du -sh "$REPO/$B/bundle" | cut -f1)"
 
-ssh "$PI" 'mkdir -p ~/src'
+ssh "$PI" 'mkdir -p ~/src/config'
 rsync -a --delete "$REPO/$B/bundle/" "$PI:vio_live/"
 scp -q "$REPO/src/capture_session.py" "$REPO/src/imu_log.py" "$REPO/src/mavlink_bridge.py" \
-    "$REPO/src/cli.py" "$REPO/src/flight_supervisor.py" "$REPO/src/vio@.service" "$PI:src/"
+    "$REPO/src/flight_config.py" "$REPO/src/cli.py" "$REPO/src/flight_supervisor.py" "$REPO/src/vio@.service" "$PI:src/"
+
+scp -q "$REPO/src/config/flight.json" "$PI:src/config/"
 
 ssh "$PI" 'missing=$(ldd ~/vio_live/vio_live | grep "not found" || true)
 [ -z "$missing" ] || { echo "  FAIL: on the Pi:"; echo "$missing"; exit 1; }

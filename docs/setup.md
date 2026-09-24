@@ -78,7 +78,9 @@ or restart the systemd service.
 
 Earlier deployments ran from `~/harness/` or invoked `~/src/vio_flight.py`.
 The service now invokes `~/src/flight_supervisor.py`. Deploy all runtime Python
-files together, including `cli.py`, before installing the updated unit.
+files together, including `cli.py`, `flight_config.py`, and `config/flight.json`, before installing
+the updated unit. The service now selects that JSON with `--config`; remove any
+old exposure/mount/link flags from local service overrides.
 After deploying, install the new unit **on the Pi**:
 
 ```sh
@@ -94,8 +96,14 @@ Updating this repository alone does not migrate an already installed service.
 For manual live capture on the configured Pi:
 
 ```sh
-sudo python3 ~/src/capture_session.py ~/vio/bench
+sudo python3 ~/src/capture_session.py ~/vio/bench --secs 30
 ```
+
+Aircraft settings live in `src/config/flight.json`; the full deployment copies
+that file to `~/src/config/flight.json` and replaces the deployed copy. Keep the
+repository configuration current before deploying. See the [runtime guide](../src/README.md#flight-configuration-and-bench-commands)
+for settings, alternative bench configurations, and diagnostic commands.
+Incremental tracking deployment updates code but preserves the deployed JSON.
 
 To use calibration/diagnostic tools on the Pi, clone this repository there
 or copy `tools/` and `src/` as siblings. Scripts such as

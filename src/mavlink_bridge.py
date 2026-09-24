@@ -28,7 +28,7 @@ FRAMES -- the part most likely to be silently wrong.
      reversed -- plus 1.4 deg. Kalibr 2026-09-14, on the 15-deg sensor plate.
   B  Airframe FRD. The camera looks forward, pitched TILT nose-down, image top up.
 Sent: position of the IMU in NED, attitude of B in NED, and the IMU's velocity
-in NED as VISION_SPEED_ESTIMATE (for EK3_SRC2/3_VELZ 6; --no-velocity stops it).
+in NED as VISION_SPEED_ESTIMATE (for EK3_SRC2/3_VELZ 6; flight.json send_velocity controls it).
 VISO_POS_X/Y/Z tells ArduPilot where the IMU sits, so no lever arm is applied here.
 
 The maths is unit-tested (test_mavlink_bridge.py); the mounting is not, so check
@@ -37,9 +37,10 @@ it on the aircraft before trusting it:
   2. By hand: nose down -> printed pitch goes negative; right side down -> roll
      goes positive; yaw clockwise seen from above -> yaw grows.
 """
-from cli import bridge_parser
+from cli import parse_options
 import math
 import os
+import pwd
 import time
 
 # Kalibr T_cam_imu rotation (IMU vectors -> camera), default IMU model,
@@ -263,19 +264,15 @@ class Sender:
 
 
 def main():
-    ap = bridge_parser(description=__doc__)
-    a = ap.parse_args()
+    user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
+    a = parse_options("bridge", user.pw_dir)
 
     if a.expect_accel:
         print(f"Airframe level and still, camera {a.tilt_deg:g} deg nose-down -- the Pi IMU reads:")
-        for ud in (False, True):
-            ax, ay, az = expected_accel(a.tilt_deg, ud)
-            print(f"  {'upside-down' if ud else 'upright    '}  x {ax:+.2f}  y {ay:+.2f}  z {az:+.2f} m/s^2"
-                  + ("   -> run with --upside-down" if ud else "   -> run as is"))
-        print("  matching neither: the tilt is not --tilt-deg; it is atan2(|z|, |y|) degrees")
+        ax, ay, az = expected_accel(a.tilt_deg, a.upside_down)
+        print(f"  {'upside-down' if a.upside_down else 'upright'}  "
+              f"x {ax:+.2f}  y {ay:+.2f}  z {az:+.2f} m/s^2")
         return 0
-    if not a.est:
-        ap.error("give the estimate file, or --expect-accel")
 
     mav = None
     if not a.dry_run:
@@ -287,7 +284,7 @@ def main():
     print(f"[mavlink_bridge] camera {a.tilt_deg:g} deg nose-down, "
           f"{'upside-down' if a.upside_down else 'upright'}", flush=True)
 
-    sender = Sender(mav, a.tilt_deg, a.upside_down, not a.no_velocity, a.max_lag)
+    sender = Sender(mav, a.tilt_deg, a.upside_down, a.send_velocity, a.max_lag)
     for line in follow(a.est):
         sender.line(line)
         msg = sender.report()

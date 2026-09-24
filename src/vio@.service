@@ -6,7 +6,7 @@ Description=VIO flight session for %i (src/flight_supervisor.py)
 
 [Service]
 Environment=SUDO_USER=%i
-ExecStart=/usr/bin/python3 -u /home/%i/src/flight_supervisor.py --exposure-sweep
+ExecStart=/usr/bin/python3 -u /home/%i/src/flight_supervisor.py --config /home/%i/src/config/flight.json
 # SIGTERM to flight_supervisor.py alone: it passes it to capture_session.py, which stops the
 # camera and lets vio_live close the recording. Anything left is killed only if
 # that overruns TimeoutStopSec (flight_supervisor.py itself gives it 80 s).

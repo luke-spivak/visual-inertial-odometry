@@ -5,9 +5,9 @@ capture_session.py -- run OpenVINS live on viopi (Phase 4 step 7). With a termin
     ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1'           # until Ctrl-C
     ssh -t viopi 'sudo python3 ~/src/capture_session.py ~/vio/walk1 --secs 180'
 
-1. Auto-exposure probe, 2.5 s: point the camera at the scene. Shutter capped
-   at --max-shutter us (default 4000) against motion blur, gain makes up the
-   rest; refuses above gain 16. Chosen values go to <out>.exposure.json.
+1. Select exposure using flight.json: sweep (default), auto, or fixed.
+   Auto exposure caps shutter at max_shutter microseconds and makes up the
+   rest with gain; refuses above gain 16. Values go to <out>.exposure.json.
 2. The IMU is set up through imu_log.setup() -- the ODR, ranges and monotonic
    clock of the calibration run -- but at FIFO watermark 8, so samples reach
    the estimator ~18 ms after they are taken rather than the ~145 ms that the
@@ -17,13 +17,14 @@ capture_session.py -- run OpenVINS live on viopi (Phase 4 step 7). With a termin
 4. Records everything to <out>.{y16,meta.json,imu.json,imu_*.bin} unless
    --no-record, so the same run can be replayed on the VM through
    vio_bag_from_raw.py + replay_openvins.sh, and the estimate is <out>.est.txt.
-5. vio_live low-passes the IMU at --imu-lpf Hz (default 50) before OpenVINS,
+5. vio_live low-passes the IMU at imu_lpf Hz from flight.json (default 50) before OpenVINS,
    against the motor vibration. The recording stays raw, so a replay is
    unfiltered unless the replay filters it too.
 6. SIGTERM stops it the way Ctrl-C does, so flight_supervisor.py (started at boot by
    vio@.service) can stop it and keep the recording.
 """
-from cli import capture_parser, parse_capture_options
+from cli import parse_options
+from flight_config import save_config
 import json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -142,23 +143,24 @@ def imu_setup(watermark, out):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    ap = capture_parser(user.pw_dir, description=__doc__)
-    a = parse_capture_options(ap)
+    a = parse_options("capture", user.pw_dir)
     if os.geteuid() != 0:
         fail("needs root for the IMU: run with sudo")
-    for f in (a.bin, a.config):
+    for f in (a.estimator_binary, a.estimator_config):
         if not os.path.exists(f):
             fail(f"{f} not found -- run tools/deploy/build_vio.sh on the Mac")
     out = os.path.abspath(a.out)
     est = os.path.abspath(a.est) if a.est else out + ".est.txt"
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    save_config(a, out + ".flight.json")
     # Under systemd (flight_supervisor.py) a stop is SIGTERM to this process alone, with no
     # tty to hand SIGINT to rpicam-raw and vio_live as well. Take it as a Ctrl-C:
     # the finally block stops the camera, and vio_live ends when its FIFOs close.
     signal.signal(signal.SIGTERM, _sigterm)
 
-    print("=== exposure: 2.5 s of auto-exposure, point the camera at the scene ===")
-    sh, g = exposure_sweep() if a.exposure_sweep else ae_probe(a.max_shutter, a.shutter, a.gain)
+    print(f"=== exposure: {a.exposure_mode}, point the camera at the scene ===")
+    sh, g = (exposure_sweep() if a.exposure_mode == "sweep" else
+             ae_probe(a.max_shutter, a.shutter if a.exposure_mode == "fixed" else None, a.gain))
     with open(out + ".exposure.json", "w") as f:
         json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)
 
@@ -175,14 +177,14 @@ def main():
                 with open(out + ".recording.json", "w") as manifest:
                     json.dump({"version": 1, "width": W, "height": H,
                                "argv": sys.argv, "clock": "CLOCK_MONOTONIC",
-                               "config_files": {name: open(os.path.join(os.path.dirname(a.config), name)).read()
-                                                for name in os.listdir(os.path.dirname(a.config))
+                               "config_files": {name: open(os.path.join(os.path.dirname(a.estimator_config), name)).read()
+                                                for name in os.listdir(os.path.dirname(a.estimator_config))
                                                 if name.endswith(".yaml")}}, manifest, indent=2)
             except OSError as e:
                 print(f"Could not save recording manifest: {e}")
         devs = imu_setup(a.watermark, out)
-        vio = subprocess.Popen([a.bin, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
-                                "--config", a.config, "--out", est, "--verbosity", a.verbosity,
+        vio = subprocess.Popen([a.estimator_binary, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
+                                "--config", a.estimator_config, "--out", est, "--verbosity", a.verbosity,
                                 "--imu-lpf", str(a.imu_lpf)]
                                + ([] if a.no_record else ["--record", out]))
         time.sleep(1.5)

@@ -1,0 +1,21 @@
+{
+  "recording_dir": "~/vio",
+  "estimate_dir": "/run/vio",
+  "min_free_gb": 20.0,
+  "device": "/dev/ttyAMA0",
+  "baud": 230400,
+  "tilt_deg": 15.0,
+  "upside_down": true,
+  "send_velocity": true,
+  "max_lag": 0.5,
+  "fps": 20.0,
+  "max_shutter": 4000,
+  "exposure_mode": "sweep",
+  "shutter": 200,
+  "gain": 1.0,
+  "watermark": 8,
+  "imu_lpf": 50.0,
+  "estimator_binary": "~/vio_live/vio_live",
+  "estimator_config": "~/vio_live/config/estimator_config.yaml",
+  "verbosity": "WARNING"
+}
