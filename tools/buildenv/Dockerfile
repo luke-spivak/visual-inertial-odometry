@@ -16,7 +16,7 @@ FROM debian:trixie
 # kernel and the Pi's own libraries, so building them here buys nothing and
 # risks version skew.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git pkg-config ca-certificates file \
+        build-essential cmake ninja-build git pkg-config ca-certificates file nlohmann-json3-dev \
         libeigen3-dev \
         libboost-filesystem-dev libboost-date-time-dev \
         libboost-thread-dev libboost-system-dev \
