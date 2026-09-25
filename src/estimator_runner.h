@@ -3,6 +3,7 @@
 #include "camera_source.h"
 #include "estimate.h"
 #include "imu_device.h"
+#include "recording.h"
 #include <atomic>
 #include <filesystem>
 #include <memory>
@@ -32,6 +33,7 @@ private:
 
 struct RunnerOptions {
     std::vector<ImuDevice> devices;
+    std::shared_ptr<RecordingStatus> recording_status;
     CameraSource* camera{nullptr}; // Owned by the capture session; null selects legacy FIFOs.
     std::filesystem::path frames, metadata, estimate_log, recording_prefix;
     double imu_lpf_hz{50}, imu_rate_hz{416}, camera_fps{20};

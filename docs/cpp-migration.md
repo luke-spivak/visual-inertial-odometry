@@ -34,8 +34,11 @@ control and failsafes; systemd owns application startup and process restart.
    `camera_capture.*` validates layouts and performs fixed/auto/sweep selection.
    Verify the actual Pi mode, stride, timestamps, exposure, calibration, and
    buffer reuse under load before deployment; compilation does not establish equivalence.
-5. Isolate recording behind bounded queues. Inject slow/full storage and interrupted
-   shutdown; record gaps explicitly and keep live estimate delivery independent.
+5. **Implemented, Pi throughput validation pending: recording isolation.**
+   `recording.*` owns a bounded recording queue and one disk worker shared by raw
+   IMU, camera/metadata pairs, estimates, and feature snapshots. Slow/full storage
+   and interrupted shutdown tests pass. Overflow disables recording for the rest
+   of that capture, retaining an explicitly incomplete prefix while navigation continues.
 6. Switch the service and remove replaced Python runtime paths only after replay,
    simulated-FC, and hardware gates pass. Retain a rollback deployment.
 
@@ -57,8 +60,8 @@ actual progress; the planned application is not yet a replacement for the servic
   Validity checks do not grant publication permission or infer session restarts.
 - The estimator worker owns OpenVINS access and publishes value snapshots. A
   communication/control loop owns UART and session policy; it does not access
-  mutable estimator state. Recording isolation is the target for step 5; current
-  synchronous sensor/estimate writes can still delay capture or estimation.
+  mutable estimator state. The recording worker owns all streaming disk writes; producers
+  only copy/serialize and enqueue data.
 - Sensor/estimate buffers are bounded. Camera backlog can discard old frames;
   IMU overflow is an explicit integrity fault. No stale-pose retransmission as
   if it were a fresh measurement.
@@ -192,13 +195,33 @@ The native path saves flight/exposure/IMU metadata and the existing recording fi
 formats. Completion markers require the capture to return without errors after
 requested shutdown (the compatibility `camera_exit: 0` field now means native
 camera shutdown succeeded).
-Full recording isolation is still step 5: raw frame/IMU/estimate writes remain
-synchronous, and a blocked filesystem or an OpenVINS call can delay a worker join.
-A process-level stop timeout is still needed at deployment; no thread is forcibly
-killed while it owns estimator state. Recording ownership/permissions under the
-final service account also need verification before cutover.
+Streaming recording uses one worker with at most 32 MiB/1024 pending records,
+plus one in-flight record and producers' temporary copies. Its mutex is never held
+across disk I/O. The first overflow or write failure stops further recording for
+that capture; navigation continues. Camera pixels and their metadata are enqueued
+as one item. A partial disk write still makes the entire recording incomplete.
+`*.recording-status.json` starts as unfinished and, when storage permits, reports
+per-stream submitted/written/rejected counts and the failure reason. Counts refer
+to records (an IMU record here is one read batch). Recording stops at the first gap,
+so it does not silently concatenate later IMU data across a missing interval.
+`writer_drained` describes the writer only; the application's `.complete.json`
+marker additionally requires error-free capture shutdown and successful writer
+close. Missing, unfinished, or failed status must never be treated as a full recording.
 
-Validation: macOS Release and ASan/UBSan pass the five library/lifecycle CTest
+Shutdown allows two seconds for the recorder to drain. A writer stuck in a kernel
+file operation may outlive the capture, but owns only its sink, queued data, and
+shared status. It cannot reference the estimator or sensor handles. A process-wide
+single-writer slot prevents retries from accumulating blocked threads; further
+recording stays disabled until that writer exits. A timeout permanently disqualifies
+that capture's completion marker, even if its writer later finishes. This is not
+cancellation of the underlying filesystem operation. systemd's process-level stop
+timeout remains necessary for deployment and for blocked OpenVINS/library calls.
+Startup configuration metadata and the final completion marker are still written
+outside the streaming path. Abrupt power-loss durability is not guaranteed by file
+close; no claim of fsync-level recording durability is made. Service-account file
+ownership and sustained recording throughput still require Pi validation.
+
+Validation: macOS Release and ASan/UBSan pass the six library/lifecycle CTest
 programs. Linux ARM64 builds the actual OpenVINS adapter, `vio_flight`, and legacy
 `vio_live`; its tests additionally exercise calibration direction, worker-failure
 unwinding, real SIGINT/SIGTERM, and duplicate application exclusion using a virtual
@@ -209,13 +232,18 @@ Frame tests cover padded R8/R16 extraction, malformed frames, clock conversion,
 regressing/stale timestamps, bounded queue drops, errors, and waking blocked readers.
 The real OpenVINS runner test feeds a native frame and injects a camera failure,
 checking worker cleanup and recording pixels/timestamps/sequence together.
+Recording tests hold the sink blocked while producers fill the bounded queue,
+verify overflow accounting, inject storage failure (including Linux `/dev/full`),
+and destroy a timed-out recorder before releasing its writer. Lifecycle tests
+verify that failed recording suppresses the completion marker without stopping
+pose publication. Feature serialization is covered by the same CTest target.
 The existing 7,623-estimate flight replay remains part of the MAVLink tests.
 
 Pi hardware gates remain: sensor timing and filter behavior at the read-back IIO
 rate, CPU/queue performance with serialized OpenVINS ownership, real libcamera
 startup/shutdown, UART buffering, FC boot detection and alignment semantics, and
 signal/error cleanup under load. The Python service remains the deployment default
-until those checks and recording isolation are complete.
+until those hardware checks and deployment cutover are complete.
 
 
 ## Native camera contract

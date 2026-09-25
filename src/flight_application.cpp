@@ -102,6 +102,7 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
     options.imu_rate_hz = options.devices.front().rate_hz;
     options.generation = generation;
     if (record) {
+        options.recording_status = std::make_shared<RecordingStatus>();
         options.recording_prefix = prefix;
         options.estimate_log = prefix.string() + ".est.txt";
     }
@@ -148,7 +149,7 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
     }
     if (capture_error)
         std::rethrow_exception(capture_error);
-    if (record && requested_stop)
+    if (record && requested_stop && options.recording_status->complete())
         save(prefix.string() + ".complete.json",
              {{"version", 1}, {"vio_exit", 0}, {"camera_exit", 0}});
 }

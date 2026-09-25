@@ -36,12 +36,13 @@ tracking-video rendering. Other analysis tools can additionally need
 Matplotlib, PyYAML, pymavlink, or ROS; their imports and usage comments describe
 their inputs. `tools/tracking/render_tracking.py` uses FFmpeg supplied by imageio-ffmpeg.
 
-The feature logger also has a standalone C++17 test:
+The native recording tests include feature serialization, slow storage, bounded shutdown,
+and (on Linux) `/dev/full` errors:
 
 ```sh
-c++ -std=c++17 -pthread -I src/openvins_runner \
-  tests/test_feature_log.cpp -o /tmp/vio-feature-log-test
-/tmp/vio-feature-log-test /tmp/vio-feature-log-test.jsonl
+cmake -S src -B build/native-core
+cmake --build build/native-core
+ctest --test-dir build/native-core -R recording --output-on-failure
 ```
 
 Score a retained handheld estimate without hardware or ROS:

@@ -104,8 +104,9 @@ requires measured offsets/markers and is not implemented here.
 python -m unittest discover -s harness -p test_render_tracking.py -v
 ```
 
-The standalone C++ test `src/openvins_runner/test_feature_log.cpp` runs in Linux
-(the existing build container), including `/dev/full` write-failure handling.
+The CTest recording test (`tests/test_recording.cpp`) checks feature serialization
+and recording failure handling, including `/dev/full` on Linux. Feature records
+now share the bounded recording worker with images, IMU samples, and estimates.
 
 Before a flight with the new binary, do a props-off recorded camera movement:
 check dots against image features and compare logging-on/off frame drops,

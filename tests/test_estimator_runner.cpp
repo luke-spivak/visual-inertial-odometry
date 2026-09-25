@@ -89,6 +89,11 @@ int main(int argc, char** argv) {
         std::ifstream(fixture.root / "native.meta.json") >> metadata;
         require(metadata[0]["SensorTimestamp"] == 1000000000 && metadata[0]["Sequence"] == 17,
                 "native frame and metadata stay paired");
+        nlohmann::json recording_status;
+        std::ifstream(fixture.root / "native.recording-status.json") >> recording_status;
+        require(recording_status["writer_drained"] == true &&
+                    recording_status["streams"]["camera"]["written"] == 1,
+                "native adapter drains its asynchronous recording before returning");
         std::cout << "OpenVINS calibration and worker cleanup checks passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

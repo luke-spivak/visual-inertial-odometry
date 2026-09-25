@@ -56,7 +56,7 @@ struct CaptureState {
     std::atomic<int> runs{0}, exits{0};
     unsigned camera_starts{0}, camera_stops{0};
     std::atomic<bool> stop{false};
-    bool fail_first{false}, armed{false};
+    bool fail_first{false}, armed{false}, recording_failed{false};
     unsigned pose_count{0}, alignment_count{0};
     std::vector<unsigned char> counters;
 };
@@ -87,6 +87,11 @@ public:
                 throw std::runtime_error("injected estimator failure");
             }
             std::this_thread::sleep_for(5ms);
+        }
+        if (options.recording_status) {
+            options.recording_status->failure =
+                state_.recording_failed ? RecordingFailure::Storage : RecordingFailure::None;
+            options.recording_status->finished = true;
         }
         ++state_.exits;
     }
@@ -273,20 +278,25 @@ void frame_checks() {
 }
 
 void lifecycle(const char* config_path, bool restart, bool armed, bool missing_camera,
-               bool camera_error = false) {
+               bool camera_error = false, int recording_result = -1) {
     Fixture f;
     nlohmann::json json;
     std::ifstream(config_path) >> json;
     json["recording_dir"] = (f.root / "recordings").string();
     json["estimate_dir"] = (f.root / "runtime").string();
     json["exposure_mode"] = "fixed";
-    json["min_free_gb"] = 1e9; // No recordings are expected from the fake estimator.
+    json["min_free_gb"] = recording_result < 0 ? 1e9 : 0;
+    if (recording_result >= 0) {
+        json["estimator_config"] = (f.root / "estimator_config.yaml").string();
+        put(f.root / "estimator_config.yaml", "test: true");
+    }
     put(f.root / "flight.json", json.dump());
     const auto config = load_flight_config(f.root / "flight.json", f.root);
     require(config.estimator_config.string().find(f.root.string()) == 0, "home expansion");
     CaptureState state;
     state.fail_first = restart;
     state.armed = armed;
+    state.recording_failed = recording_result == 0;
     const auto deadline = std::chrono::steady_clock::now() +
                           ((armed || missing_camera || camera_error) ? 100ms : 12s);
     run_flight(
@@ -301,6 +311,13 @@ void lifecycle(const char* config_path, bool restart, bool armed, bool missing_c
         [&] { return state.stop || std::chrono::steady_clock::now() >= deadline; },
         {f.root, f.root});
     f.disabled();
+    if (recording_result >= 0) {
+        unsigned markers = 0;
+        for (const auto& file : fs::directory_iterator(config.recording_dir))
+            markers += file.path().string().find(".complete.json") != std::string::npos;
+        require(markers == unsigned(recording_result),
+                "only successful recording gets a completion marker");
+    }
     require(state.camera_starts == state.camera_stops, "all started cameras stopped");
     require(state.runs == state.exits, "all estimator workers joined");
     for (const auto& entry : fs::directory_iterator(config.runtime_dir))
@@ -337,6 +354,8 @@ int main(int argc, char** argv) {
         lifecycle(argv[1], false, true, false);
         lifecycle(argv[1], false, false, true);
         lifecycle(argv[1], false, false, false, true);
+        lifecycle(argv[1], false, false, false, false, 0);
+        lifecycle(argv[1], false, false, false, false, 1);
         std::cout << "Application startup, restart, and cleanup checks passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -16,6 +16,7 @@
 #include <cstring>
 #include <deque>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -28,7 +29,7 @@
 #include "core/VioManager.h"
 #include "core/VioManagerOptions.h"
 #include "estimator_runner.h"
-#include "feature_log.h"
+#include "feature_snapshot.h"
 #include "state/State.h"
 #include "track/TrackBase.h"
 #include "types/IMU.h"
@@ -84,7 +85,6 @@ struct ImuDev {
     int rec = 0, ts_off = 0, x_off = 0, y_off = 0, z_off = 0;
     double scale = 0;
     int fd = -1;
-    FILE* rec_fp = nullptr;
 };
 
 // Suppress motor vibration above the useful motion band. Subtract the filter's
@@ -160,7 +160,8 @@ struct Shared {
     vio::SessionGeneration generation{0};
     std::deque<ov_core::ImuData> imu_q;
     std::shared_ptr<LoggedVioManager> sys;
-    FeatureLog features;
+    vio::Recording* recording{nullptr};
+    bool record_sensors{false}, record_estimates{false};
     ImuLowPass lpf;
     int W = 1280, H = 800;
 
@@ -249,8 +250,12 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
                 last_data = t;
             }
             // Preserve raw samples for replay before filtering or shifting timestamps.
-            if (d.rec_fp)
-                fwrite(buf.data(), 1, size_t(n), d.rec_fp);
+            if (S.record_sensors && S.recording->active()) {
+                const bool accel = d.kind == "accel";
+                S.recording->submit(
+                    {accel ? vio::RecordingStream::Accel : vio::RecordingStream::Gyro,
+                     {{accel ? 0U : 1U, {buf.begin(), buf.begin() + n}}}});
+            }
             for (ssize_t o = 0; o < n; o += d.rec) {
                 int64_t t;
                 Eigen::Vector3d v;
@@ -352,7 +357,7 @@ static void enqueue_frame(Shared& S, cv::Mat img, int64_t ts, size_t idx, size_t
     S.q_cv.notify_one();
 }
 
-static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t max_queue) {
+static void frame_thread(Shared& S, int fd, size_t max_queue) {
     const size_t npx = size_t(S.W) * S.H;
     std::vector<uint8_t> raw(npx * 2);
     size_t idx = 0;
@@ -369,14 +374,11 @@ static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t 
             ts = S.meta_ts.front();
             S.meta_ts.pop_front();
         }
-        if (rec_fp)
-            fwrite(raw.data(), 1, raw.size(), rec_fp);
-        // Metadata goes out with each frame, not at exit: a run killed before its
-        // summary still leaves timestamps for every frame written (the converter
-        // reads a file missing its closing bracket).
-        if (meta_fp) {
-            fprintf(meta_fp, "%s{\"SensorTimestamp\": %lld}", idx == 1 ? "" : ",\n", (long long)ts);
-            fflush(meta_fp);
+        if (S.record_sensors && S.recording->active()) {
+            const auto metadata = std::string(idx == 1 ? "" : ",\n") +
+                                  "{\"SensorTimestamp\":" + std::to_string(ts) + "}";
+            S.recording->submit(
+                {vio::RecordingStream::Camera, {{2, raw}, vio::recording_text(3, metadata)}});
         }
         // R8 mode: 8-bit data in the high byte of a little-endian u16. The low
         // byte must be zero; if it is not, this is a different layout and >>8
@@ -399,8 +401,7 @@ static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t 
 }
 
 /// Native camera frames already carry their matching exposure timestamp and own their pixels.
-static void camera_thread(Shared& S, vio::CameraSource& camera, FILE* rec_fp, FILE* meta_fp,
-                          size_t max_queue, double fps) {
+static void camera_thread(Shared& S, vio::CameraSource& camera, size_t max_queue, double fps) {
     size_t idx = 0;
     auto last_frame = std::chrono::steady_clock::now();
     std::vector<uint8_t> raw(vio::CameraFrame::width * vio::CameraFrame::height * 2);
@@ -416,19 +417,15 @@ static void camera_thread(Shared& S, vio::CameraSource& camera, FILE* rec_fp, FI
         if (frame->pixels.size() != size_t(S.W) * S.H)
             die("native camera frame dimensions changed");
         ++idx;
-        if (rec_fp) {
-            // Keep the existing replay format: mono8 in the high byte of little-endian u16.
+        if (S.record_sensors && S.recording->active()) {
+            // Preserve the replay layout; raw pixels and metadata enter the queue together.
             for (size_t i = 0; i < frame->pixels.size(); ++i)
                 raw[2 * i + 1] = frame->pixels[i];
-            if (fwrite(raw.data(), 1, raw.size(), rec_fp) != raw.size())
-                die("camera recording write failed");
-        }
-        if (meta_fp) {
-            if (fprintf(meta_fp, "%s{\"SensorTimestamp\": %lld, \"Sequence\": %llu}",
-                        idx == 1 ? "" : ",\n", (long long)frame->timestamp_ns,
-                        (unsigned long long)frame->sequence) < 0 ||
-                fflush(meta_fp))
-                die("camera metadata write failed");
+            const auto metadata = std::string(idx == 1 ? "" : ",\n") +
+                                  "{\"SensorTimestamp\":" + std::to_string(frame->timestamp_ns) +
+                                  ",\"Sequence\":" + std::to_string(frame->sequence) + "}";
+            S.recording->submit(
+                {vio::RecordingStream::Camera, {{2, raw}, vio::recording_text(3, metadata)}});
         }
         // OpenCV's view must not outlive the vector: clone before returning the frame.
         cv::Mat view(S.H, S.W, CV_8UC1, frame->pixels.data());
@@ -438,7 +435,7 @@ static void camera_thread(Shared& S, vio::CameraSource& camera, FILE* rec_fp, FI
 
 // ---------------------------------------------------------------- estimator
 
-static void update_thread(Shared& S, FILE* out) {
+static void update_thread(Shared& S) {
     double calib_dt = S.sys->get_state()->_calib_dt_CAMtoIMU->value()(0);
     int64_t stall_since = 0;
     bool first_update = false;
@@ -483,9 +480,12 @@ static void update_thread(Shared& S, FILE* out) {
         auto& c = captured.camera;
         int64_t t0 = now_ns();
         S.sys->feed_measurement_camera(c);
-        if (S.features.active())
-            S.features.push({captured.timestamp_ns, captured.frame_index, S.W, S.H,
-                             S.sys->initialized_time() > 0, S.sys->snapshot()});
+        if (S.record_sensors && S.recording->active())
+            S.recording->submit(
+                {vio::RecordingStream::Features,
+                 {vio::recording_text(
+                     4, feature_record({captured.timestamp_ns, captured.frame_index, S.W, S.H,
+                                        S.sys->initialized_time() > 0, S.sys->snapshot()}))}});
 
         int64_t t1 = now_ns();
         double ms = (t1 - t0) * 1e-6;
@@ -529,14 +529,18 @@ static void update_thread(Shared& S, FILE* out) {
         snapshot.velocity_world_mps = v;
         snapshot.world_from_imu = Eigen::Quaterniond(q(3), q(0), q(1), q(2));
         S.estimates->store(snapshot);
-        if (out) {
-            fprintf(
-                out,
-                "%.9f %.9f %.9f %.9f %.9f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f "
-                "%.6f\n",
-                state->_timestamp, q(0), q(1), q(2), q(3), p(0), p(1), p(2), v(0), v(1), v(2),
-                bg(0), bg(1), bg(2), ba(0), ba(1), ba(2));
-            fflush(out);
+        if (S.record_estimates && S.recording->active()) {
+            std::ostringstream line;
+            line << std::fixed << std::setprecision(9) << state->_timestamp;
+            for (int i = 0; i < 4; ++i)
+                line << ' ' << q(i);
+            line << std::setprecision(6);
+            for (const auto& vector : {p, v, bg, ba})
+                for (int i = 0; i < 3; ++i)
+                    line << ' ' << vector(i);
+            line << '\n';
+            S.recording->submit({vio::RecordingStream::Estimate,
+                                 {vio::recording_text(S.record_sensors ? 5 : 0, line.str())}});
         }
         std::lock_guard<std::mutex> lk(S.st_mtx);
         if (!S.init) {
@@ -585,19 +589,9 @@ private:
 /// Close capture files/descriptors after the workers that use them have joined.
 struct CaptureFiles {
     std::vector<int> descriptors;
-    std::vector<FILE*> files;
     ~CaptureFiles() {
-        for (auto* file : files)
-            fclose(file);
         for (int fd : descriptors)
             close(fd);
-    }
-    FILE* output(const std::string& path, const char* mode) {
-        auto* file = fopen(path.c_str(), mode);
-        if (!file)
-            die("cannot open " + path);
-        files.push_back(file);
-        return file;
     }
     int input(const std::string& path) {
         int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -681,24 +675,35 @@ void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
         d.y_off = device.axis_offsets[1];
         d.z_off = device.axis_offsets[2];
         d.fd = files.input(d.chardev);
-        if (!options.recording_prefix.empty())
-            d.rec_fp =
-                files.output(options.recording_prefix.string() + ".imu_" + d.kind + ".bin", "wb");
         devs.push_back(d);
     }
-    FILE* out =
-        options.estimate_log.empty() ? nullptr : files.output(options.estimate_log.string(), "w");
-    if (out)
-        fprintf(out, "# timestamp(s) q(JPL xyzw) p v bg ba\n");
-    FILE* y16 = nullptr;
-    FILE* meta_json = nullptr;
-    if (!options.recording_prefix.empty()) {
-        y16 = files.output(options.recording_prefix.string() + ".y16", "wb");
-        setvbuf(y16, nullptr, _IOFBF, 8 << 20);
-        meta_json = files.output(options.recording_prefix.string() + ".meta.json", "w");
-        fprintf(meta_json, "[\n");
-        S.features.start(options.recording_prefix.string() + ".features.jsonl");
+    S.record_sensors = !options.recording_prefix.empty();
+    S.record_estimates = !options.estimate_log.empty();
+    std::unique_ptr<vio::Recording> recording;
+    if (S.record_sensors || S.record_estimates) {
+        const auto prefix = options.recording_prefix.string();
+        std::vector<vio::RecordingFile> outputs;
+        if (S.record_sensors) {
+            outputs = {{prefix + ".imu_accel.bin", "", ""},
+                       {prefix + ".imu_gyro.bin", "", ""},
+                       {prefix + ".y16", "", ""},
+                       {prefix + ".meta.json", "[\n", "\n]\n"},
+                       {prefix + ".features.jsonl",
+                        "{\"type\":\"header\",\"version\":1,\"source\":\"live_tracker\","
+                        "\"coordinates\":\"raw_pixels\",\"frame_index_base\":0,"
+                        "\"openvins_revision\":\"69488123ed9362dd44b6f28e7f4680abbff1442b\"}\n",
+                        "{\"type\":\"end\"}\n"}};
+        }
+        if (S.record_estimates)
+            outputs.push_back({options.estimate_log, "# timestamp(s) q(JPL xyzw) p v bg ba\n", ""});
+        auto status = options.recording_status ? options.recording_status
+                                               : std::make_shared<vio::RecordingStatus>();
+        const auto report =
+            (S.record_sensors ? prefix : options.estimate_log.string()) + ".recording-status.json";
+        recording = std::make_unique<vio::Recording>(
+            vio::recording_files(std::move(outputs), report), status);
     }
+    S.recording = recording.get();
     int mfd = -1, ffd = -1;
     if (!options.camera) {
         mfd = files.input(options.metadata.string());
@@ -706,15 +711,14 @@ void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
     }
     Workers workers(stop);
     workers.launch([&] { imu_thread(S, devs); });
-    workers.launch([&] { update_thread(S, out); });
+    workers.launch([&] { update_thread(S); });
     if (options.camera) {
         workers.launch([&] {
-            camera_thread(S, *options.camera, y16, meta_json, options.max_camera_queue,
-                          options.camera_fps);
+            camera_thread(S, *options.camera, options.max_camera_queue, options.camera_fps);
         });
     } else {
         workers.launch([&] { meta_thread(S, mfd); });
-        workers.launch([&] { frame_thread(S, ffd, y16, meta_json, options.max_camera_queue); });
+        workers.launch([&] { frame_thread(S, ffd, options.max_camera_queue); });
     }
     const auto start = now_ns();
     bool imu_stalled = false;
@@ -736,9 +740,8 @@ void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
     S.q_cv.notify_all();
     S.meta_cv.notify_all();
     workers.join();
-    S.features.close();
-    if (meta_json)
-        fprintf(meta_json, "\n]\n");
+    if (recording && !recording->close())
+        std::cerr << "recording incomplete; navigation was kept independent of storage\n";
     if (workers.error)
         std::rethrow_exception(workers.error);
     if (imu_stalled)
