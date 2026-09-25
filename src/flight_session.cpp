@@ -4,6 +4,8 @@
 
 namespace vio {
 
+/// Store the timing/retry limits and the reset byte supplied by the application.
+/// Reject settings that would disable time limits or exceed MAVLink's retry byte.
 FlightSession::FlightSession(FlightSessionConfig config, std::uint8_t initial_reset_counter)
     : config_(config), reset_counter_(initial_reset_counter) {
     if (config.heartbeat_timeout.count() <= 0 || config.alignment_timeout.count() <= 0 ||
@@ -13,6 +15,8 @@ FlightSession::FlightSession(FlightSessionConfig config, std::uint8_t initial_re
     }
 }
 
+/// Begin a new estimator coordinate frame and revoke the previous alignment.
+/// Advance the reset byte after the first session; reject an unresolved old command.
 void FlightSession::start(SessionGeneration generation) {
     if (state_ == FlightSessionState::Failed ||
         (attempts_ != 0 && state_ != FlightSessionState::Aligned))
@@ -29,11 +33,14 @@ void FlightSession::start(SessionGeneration generation) {
     state_ = FlightSessionState::WaitingForController;
 }
 
+/// Check whether the last controller heartbeat is recent enough to trust.
 bool FlightSession::controller_fresh(MonotonicTime now) const {
     return heartbeat_time_ && now >= *heartbeat_time_ &&
            now - *heartbeat_time_ < config_.heartbeat_timeout;
 }
 
+/// Record whether the controller is armed and when we last heard from it.
+/// Arming before an outstanding alignment is acknowledged stops this session.
 void FlightSession::heartbeat(bool armed, MonotonicTime now) {
     // Expire the old session before refreshing it, even if the loop was delayed.
     tick(now);
@@ -44,6 +51,8 @@ void FlightSession::heartbeat(bool armed, MonotonicTime now) {
     tick(now);
 }
 
+/// Update the state as time passes, even when no new messages arrive.
+/// Revoke alignment on heartbeat loss and retry or fail expired alignment requests.
 void FlightSession::tick(MonotonicTime now) {
     if (!generation_ || state_ == FlightSessionState::Failed)
         return;
@@ -73,11 +82,15 @@ void FlightSession::tick(MonotonicTime now) {
     }
 }
 
+/// Allow measurements with a fresh controller: only disarmed until aligned,
+/// then armed or disarmed. A failed or unstarted session cannot publish.
 bool FlightSession::can_publish(MonotonicTime now) const {
     return generation_ && controller_fresh(now) && state_ != FlightSessionState::Failed &&
            (state_ == FlightSessionState::Aligned || !armed_);
 }
 
+/// Check whether we may request alignment now: disarmed, a recent measurement
+/// already sent, retry delay elapsed, and attempts still available.
 bool FlightSession::alignment_due(MonotonicTime now) const {
     return state_ == FlightSessionState::Priming && can_publish(now) && !armed_ &&
            attempts_ < config_.alignment_attempts && now >= next_request_time_ &&
@@ -85,10 +98,14 @@ bool FlightSession::alignment_due(MonotonicTime now) const {
            now - *measurement_time_ <= config_.max_estimate_age;
 }
 
+/// Remember the sensor timestamp of the last complete measurement written.
+/// This is evidence for priming, not confirmation that the controller received it.
 void FlightSession::measurement_sent(MonotonicTime timestamp) {
     measurement_time_ = timestamp;
 }
 
+/// Start the acknowledgment timer after the whole alignment command is written.
+/// Count this attempt only after transmission, not when the command is queued.
 void FlightSession::alignment_sent(MonotonicTime now) {
     if (!alignment_due(now))
         throw std::logic_error("alignment sent without a fresh disarmed measurement");
@@ -98,6 +115,8 @@ void FlightSession::alignment_sent(MonotonicTime now) {
     state_ = FlightSessionState::AwaitingAlignment;
 }
 
+/// Apply the controller's reply to an outstanding alignment request.
+/// Acceptance permits armed publication; progress waits, busy retries, and rejection stops.
 void FlightSession::acknowledge(AlignmentResult result, MonotonicTime now) {
     tick(now);
     if (state_ != FlightSessionState::AwaitingAlignment || !controller_fresh(now) || armed_)
@@ -124,6 +143,7 @@ void FlightSession::acknowledge(AlignmentResult result, MonotonicTime now) {
     }
 }
 
+/// Latch a failure so this session cannot publish or automatically recover.
 void FlightSession::fail() {
     state_ = FlightSessionState::Failed;
     measurement_time_.reset();

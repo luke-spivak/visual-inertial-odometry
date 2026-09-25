@@ -10,12 +10,15 @@ namespace {
 constexpr float visual_odometry_align = 80;
 constexpr float switch_high = 2;
 
+/// Check that each double can become a finite MAVLink float without overflowing.
 bool fits_wire(const Eigen::Vector3d& vector) {
     return vector.allFinite() &&
            (vector.array().abs() <= static_cast<double>(std::numeric_limits<float>::max())).all();
 }
 } // namespace
 
+/// Take ownership of the byte connection and store the mounting and controller IDs.
+/// Each link keeps its own parser, packet sequence, and flight-session state.
 MavlinkLink::MavlinkLink(std::unique_ptr<ByteStream> stream, MavlinkLinkConfig config,
                          FrameTransform transform, std::uint8_t initial_reset_counter)
     : stream_(std::move(stream)), config_(config), transform_(std::move(transform)),
@@ -28,6 +31,8 @@ MavlinkLink::MavlinkLink(std::unique_ptr<ByteStream> stream, MavlinkLinkConfig c
     }
 }
 
+/// Start a new estimator generation, discarding unsent data from the previous one.
+/// A partially written packet cannot be abandoned safely, so that case closes the link.
 void MavlinkLink::start_session(SessionGeneration generation) {
     if (pending_offset_ != 0) {
         fail("session restart during a partial transmission");
@@ -39,6 +44,8 @@ void MavlinkLink::start_session(SessionGeneration generation) {
     started_ = true;
 }
 
+/// Handle one decoded packet from the configured flight controller.
+/// Feed its heartbeat or relevant alignment acknowledgment into the session policy.
 void MavlinkLink::receive(const mavlink_message_t& message, MonotonicTime now) {
     if (message.sysid != config_.controller.system ||
         message.compid != config_.controller.component)
@@ -67,6 +74,7 @@ void MavlinkLink::receive(const mavlink_message_t& message, MonotonicTime now) {
     }
 }
 
+/// Encode one MAVLink packet into the fixed outgoing buffer; do not send it yet.
 void MavlinkLink::append(const mavlink_message_t& message) {
     // Only a pose/velocity pair or one control message occupies this fixed buffer.
     if (pending_size_ + MAVLINK_MAX_PACKET_LEN > pending_.size())
@@ -74,6 +82,9 @@ void MavlinkLink::append(const mavlink_message_t& message) {
     pending_size_ += mavlink_msg_to_send_buffer(pending_.data() + pending_size_, &message);
 }
 
+/// Validate a snapshot, convert its coordinates, and queue pose/velocity packets.
+/// Return why it was held or rejected if it cannot be queued. poll() does the I/O;
+/// currently only tests call this function, pending live estimator integration.
 PublishResult MavlinkLink::publish(const EstimatorEstimate& estimate, MonotonicTime now) {
     session_.tick(now);
     if (!started_ || !stream_ || !session_.can_publish(now))
@@ -117,6 +128,8 @@ PublishResult MavlinkLink::publish(const EstimatorEstimate& estimate, MonotonicT
     return PublishResult::Queued;
 }
 
+/// Queue ArduPilot's visual-odometry alignment command for the configured controller.
+/// The acknowledgment timer starts later, after poll() finishes writing the packet.
 void MavlinkLink::queue_alignment(MonotonicTime now) {
     mavlink_message_t message{};
     mavlink_msg_command_long_pack_status(config_.source.system, config_.source.component,
@@ -129,6 +142,7 @@ void MavlinkLink::queue_alignment(MonotonicTime now) {
     pending_deadline_ = now + config_.session.alignment_timeout;
 }
 
+/// Queue our own "I am here" message and schedule the next one one second later.
 void MavlinkLink::queue_heartbeat(MonotonicTime now) {
     mavlink_message_t message{};
     mavlink_msg_heartbeat_pack_status(config_.source.system, config_.source.component,
@@ -140,11 +154,13 @@ void MavlinkLink::queue_heartbeat(MonotonicTime now) {
     next_heartbeat_ = pending_deadline_;
 }
 
+/// Empty the application's outgoing buffer; this cannot retract bytes already written.
 void MavlinkLink::clear_pending() {
     pending_kind_ = PendingKind::None;
     pending_size_ = pending_offset_ = 0;
 }
 
+/// Save the failure reason, stop publication, and release the byte connection.
 void MavlinkLink::fail(std::string reason) {
     failure_reason_ = std::move(reason);
     session_.fail();
@@ -152,6 +168,9 @@ void MavlinkLink::fail(std::string reason) {
     stream_.reset();
 }
 
+/// Service the connection once: read replies, update policy, and advance a write.
+/// Work is bounded so a slow or noisy connection cannot keep this call running forever.
+/// Drop expired unsent data; close the link on I/O errors or an unsafe partial packet.
 void MavlinkLink::poll(MonotonicTime now) {
     if (!stream_)
         return;
