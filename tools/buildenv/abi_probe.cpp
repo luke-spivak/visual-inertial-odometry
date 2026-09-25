@@ -25,7 +25,7 @@ int main() {
 
     try {
         throw std::runtime_error("exception unwinding works");
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         std::printf("  %s\n", e.what());
     }
     return 0;

@@ -216,11 +216,13 @@ grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking
 grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
 min_px_dist: 15 # px; scaled up for 1280x800
 knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
-# 21 against a 30.3 Hz camera means OpenVINS keeps every SECOND frame -- the
-# effective tracking rate is 15.2 Hz, measured, not 21. Keeping every frame
-# (31.0) halves inter-frame motion to ~7.4 px and was tried for exactly that
-# reason: it did not help (16.3 % against 16.0 %), and at sigma_px 2 it was much
-# worse (63.3 %). Left at 21 because it is cheaper and no worse.
+# Inherited from the SIM config, where the camera runs at 30.3 Hz and 21 means
+# OpenVINS keeps every SECOND frame -- effective tracking rate 15.2 Hz, measured,
+# not 21. On HARDWARE the camera only delivers ~19.2 fps (src/vio_live.py, default
+# --fps 20), so 21 >= 19.2 and every frame is tracked -- no frame-skip happens here.
+# The sim's frame-skip finding (keeping every frame didn't help: 16.3 % vs 16.0 %,
+# and was worse at sigma_px 2: 63.3 %) does not transfer; re-measure on hardware
+# if track_frequency is ever changed.
 track_frequency: 21.0 # frequency we will perform feature tracking at (in frames per second / hertz)
 downsample_cameras: false # will downsample image in half if true
 num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads

@@ -38,7 +38,7 @@ actual progress; the planned application is not yet a replacement for the servic
 - Sensor timestamps are integer nanoseconds on the host monotonic clock. No
   wall-clock time or receive-time substitution. MAVLink microseconds are converted
   only at the serialization boundary.
-- `Estimate::world_from_imu` uses Eigen's Hamilton rotation semantics. OpenVINS JPL
+- `EstimatorEstimate::world_from_imu` uses Eigen's Hamilton rotation semantics. OpenVINS JPL
   xyzw coefficients represent the same numeric rotation here, but the Eigen
   constructor takes w first. The adapter must make that ordering explicit.
 - World position/velocity are gravity-aligned, z up, with arbitrary heading. The
