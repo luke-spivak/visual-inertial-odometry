@@ -1,5 +1,5 @@
 // Feed Linux IIO IMU samples and timestamped camera frames to OpenVINS.
-// Capture sessions own process setup; this runner owns updates and recordings.
+// The application owns setup; this adapter owns sensor workers and estimator state.
 
 #include <fcntl.h>
 #include <poll.h>
@@ -27,6 +27,7 @@
 
 #include "core/VioManager.h"
 #include "core/VioManagerOptions.h"
+#include "estimator_runner.h"
 #include "feature_log.h"
 #include "state/State.h"
 #include "track/TrackBase.h"
@@ -35,11 +36,8 @@
 #include "utils/opencv_yaml_parse.h"
 #include "utils/print.h"
 #include "utils/sensor_data.h"
-
-static std::atomic<bool> g_stop{false};
-static void on_signal(int) {
-    g_stop = true;
-}
+#include <functional>
+#include <stdexcept>
 
 static int64_t now_ns() {
     timespec ts;
@@ -48,14 +46,12 @@ static int64_t now_ns() {
 }
 
 [[noreturn]] static void die(const std::string& msg) {
-    fprintf(stderr, "vio_live: FAIL: %s\n", msg.c_str());
-    fflush(stderr);
-    _exit(1);
+    throw std::runtime_error(msg);
 }
 
 // Wait for readable data or stop. Returns bytes read, 0 on EOF, -1 on stop.
-static ssize_t read_some(int fd, void* buf, size_t n) {
-    while (!g_stop) {
+static ssize_t read_some(int fd, void* buf, size_t n, std::atomic<bool>& stop) {
+    while (!stop) {
         pollfd p{fd, POLLIN, 0};
         int r = poll(&p, 1, 200);
         if (r < 0 && errno != EINTR)
@@ -72,10 +68,10 @@ static ssize_t read_some(int fd, void* buf, size_t n) {
     return -1;
 }
 
-static bool read_full(int fd, uint8_t* buf, size_t n) {
+static bool read_full(int fd, uint8_t* buf, size_t n, std::atomic<bool>& stop) {
     size_t have = 0;
     while (have < n) {
-        ssize_t got = read_some(fd, buf + have, n - have);
+        ssize_t got = read_some(fd, buf + have, n - have, stop);
         if (got <= 0)
             return false;
         have += size_t(got);
@@ -159,6 +155,10 @@ struct CapturedFrame {
     size_t frame_index;
 };
 struct Shared {
+    std::atomic<bool>* stop{nullptr};
+    vio::LatestEstimate* estimates{nullptr};
+    vio::SessionGeneration generation{0};
+    std::deque<ov_core::ImuData> imu_q;
     std::shared_ptr<LoggedVioManager> sys;
     FeatureLog features;
     ImuLowPass lpf;
@@ -166,7 +166,7 @@ struct Shared {
 
     std::mutex meta_mtx;
     std::condition_variable meta_cv;
-    std::vector<int64_t> meta_ts;
+    std::deque<int64_t> meta_ts;
     bool meta_done = false;
 
     std::mutex q_mtx;
@@ -219,7 +219,8 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
     };
 
     int64_t last_data = now_ns();
-    while (!g_stop) {
+    int64_t last_timestamp[2] = {0, 0};
+    while (!*S.stop) {
         S.imu_loop_ns = now_ns();
         int r = poll(p, 2, 200);
         if (r < 0 && errno != EINTR)
@@ -227,6 +228,8 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
         if (r <= 0)
             continue;
         for (int i = 0; i < 2; i++) {
+            if (p[i].revents & (POLLERR | POLLHUP | POLLNVAL))
+                die("IMU device disconnected");
             if (!(p[i].revents & POLLIN))
                 continue;
             ImuDev& d = (i == 0) ? *acc : *gyr;
@@ -235,6 +238,8 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
                 continue;
             if (n < 0)
                 die("imu read " + d.chardev + ": " + strerror(errno));
+            if (n == 0)
+                die("IMU stream ended");
             if (n % d.rec)
                 die("IIO returned a partial record from " + d.chardev);
             if (n > 0) {
@@ -250,8 +255,16 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
                 int64_t t;
                 Eigen::Vector3d v;
                 parse(d, buf.data() + o, t, v);
+                if (t <= last_timestamp[i] || t > now_ns() + 10000000LL)
+                    die("invalid or non-increasing IMU timestamp");
+                last_timestamp[i] = t;
                 v = (i == 0 ? af : gf).step(S.lpf, t, v);
-                (i == 0 ? aq : gq).emplace_back(t - S.lpf.delay_ns, v);
+                auto& queue = i == 0 ? aq : gq;
+                if (queue.size() >= 1024)
+                    die("unpaired IMU queue overflow");
+                if (!queue.empty() && t - S.lpf.delay_ns <= queue.back().first)
+                    die("non-increasing IMU timestamp");
+                queue.emplace_back(t - S.lpf.delay_ns, v);
             }
         }
         // Lay rows on the gyro's timestamps with accel interpolated onto them --
@@ -272,12 +285,12 @@ static void imu_thread(Shared& S, std::vector<ImuDev>& devs) {
             m.timestamp = tg * 1e-9;
             m.wm = w;
             m.am = a;
-            int64_t f0 = now_ns();
-            S.sys->feed_measurement_imu(m);
-            double fm = (now_ns() - f0) * 1e-6;
-            if (fm > S.feed_ms_max)
-                S.feed_ms_max = fm;
-            S.last_imu_ns = tg;
+            {
+                std::lock_guard<std::mutex> lock(S.q_mtx);
+                if (S.imu_q.size() >= 1024)
+                    die("IMU queue overflow; estimator cannot keep up");
+                S.imu_q.push_back(m);
+            }
             S.imu_n++;
         }
         S.q_cv.notify_one();
@@ -291,8 +304,10 @@ static void meta_thread(Shared& S, int fd) {
     std::string buf;
     char tmp[8192];
     ssize_t n;
-    while ((n = read_some(fd, tmp, sizeof tmp)) > 0) {
+    while ((n = read_some(fd, tmp, sizeof tmp, *S.stop)) > 0) {
         buf.append(tmp, size_t(n));
+        if (buf.size() > 65536)
+            die("camera metadata record exceeds size limit");
         size_t k;
         while ((k = buf.find(key)) != std::string::npos) {
             size_t c = buf.find(':', k);
@@ -302,6 +317,8 @@ static void meta_thread(Shared& S, int fd) {
             int64_t ts = std::stoll(buf.substr(c + 1, e - c - 1));
             buf.erase(0, e);
             std::lock_guard<std::mutex> lk(S.meta_mtx);
+            if (S.meta_ts.size() >= 128)
+                die("camera metadata backlog overflow");
             S.meta_ts.push_back(ts);
             S.meta_cv.notify_all();
         }
@@ -317,18 +334,18 @@ static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t 
     const size_t npx = size_t(S.W) * S.H;
     std::vector<uint8_t> raw(npx * 2);
     size_t idx = 0;
-    while (read_full(fd, raw.data(), raw.size())) {
+    while (read_full(fd, raw.data(), raw.size(), *S.stop)) {
         idx++;
         int64_t ts;
         {
             std::unique_lock<std::mutex> lk(S.meta_mtx);
-            while (!(S.meta_ts.size() >= idx || S.meta_done || g_stop))
-                S.meta_cv.wait_for(lk,
-                                   std::chrono::milliseconds(
-                                       200)); // g_stop is set by a signal, which notifies nothing
-            if (S.meta_ts.size() < idx)
+            // Observe stop requests even when no metadata notification arrives.
+            while (S.meta_ts.empty() && !S.meta_done && !*S.stop)
+                S.meta_cv.wait_for(lk, std::chrono::milliseconds(200));
+            if (S.meta_ts.empty())
                 break;
-            ts = S.meta_ts[idx - 1];
+            ts = S.meta_ts.front();
+            S.meta_ts.pop_front();
         }
         if (rec_fp)
             fwrite(raw.data(), 1, raw.size(), rec_fp);
@@ -381,7 +398,8 @@ static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t 
 static void update_thread(Shared& S, FILE* out) {
     double calib_dt = S.sys->get_state()->_calib_dt_CAMtoIMU->value()(0);
     int64_t stall_since = 0;
-    while (true) {
+    bool first_update = false;
+    while (!*S.stop) {
         CapturedFrame captured;
         {
             std::unique_lock<std::mutex> lk(S.q_mtx);
@@ -391,8 +409,19 @@ static void update_thread(Shared& S, FILE* out) {
                 return !S.cam_q.empty() &&
                        S.cam_q.front().camera.timestamp < S.last_imu_ns * 1e-9 - calib_dt;
             };
-            S.q_cv.wait_for(lk, std::chrono::milliseconds(100),
-                            [&] { return ready() || S.frames_done; });
+            S.q_cv.wait_for(lk, std::chrono::milliseconds(100), [&] {
+                return ready() || !S.imu_q.empty() || S.frames_done || *S.stop;
+            });
+            auto samples = std::move(S.imu_q);
+            S.imu_q.clear();
+            lk.unlock();
+            for (const auto& sample : samples) {
+                S.sys->feed_measurement_imu(sample);
+                S.last_imu_ns = static_cast<int64_t>(std::llround(sample.timestamp * 1e9));
+            }
+            lk.lock();
+            if (*S.stop)
+                break;
             if (!ready()) {
                 if (!S.frames_done)
                     continue;
@@ -438,7 +467,7 @@ static void update_thread(Shared& S, FILE* out) {
         // update would withhold the poses ArduPilot needs for its pre-arm check.
         if (!S.vio_init)
             continue;
-        static bool first_update = false;
+        // This flag belongs to the capture, not to the process lifetime.
         if (!first_update && S.sys->initialized()) {
             first_update = true;
             printf("\n  --- moving: first full visual update at t=%.3f s ---\n\n",
@@ -448,13 +477,24 @@ static void update_thread(Shared& S, FILE* out) {
         auto imu = state->_imu;
         Eigen::Vector4d q = imu->quat();
         Eigen::Vector3d p = imu->pos(), v = imu->vel(), bg = imu->bias_g(), ba = imu->bias_a();
-        fprintf(out,
+        vio::EstimatorEstimate snapshot;
+        snapshot.timestamp =
+            vio::MonotonicTime{static_cast<int64_t>(std::llround(state->_timestamp * 1e9))};
+        snapshot.generation = S.generation;
+        snapshot.status = vio::EstimatorStatus::Ready;
+        snapshot.position_world_m = p;
+        snapshot.velocity_world_mps = v;
+        snapshot.world_from_imu = Eigen::Quaterniond(q(3), q(0), q(1), q(2));
+        S.estimates->store(snapshot);
+        if (out) {
+            fprintf(
+                out,
                 "%.9f %.9f %.9f %.9f %.9f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f "
                 "%.6f\n",
                 state->_timestamp, q(0), q(1), q(2), q(3), p(0), p(1), p(2), v(0), v(1), v(2),
                 bg(0), bg(1), bg(2), ba(0), ba(1), ba(2));
-        fflush(out); // mavlink_bridge.py follows this file live; unflushed, poses reach the FC in 4
-                     // KB bursts
+            fflush(out);
+        }
         std::lock_guard<std::mutex> lk(S.st_mtx);
         if (!S.init) {
             S.init = true;
@@ -468,263 +508,192 @@ static void update_thread(Shared& S, FILE* out) {
     }
 }
 
-// ---------------------------------------------------------------- diagnostics
-
-static long read_long(const std::string& path) {
-    FILE* f = fopen(path.c_str(), "r");
-    if (!f)
-        return -1;
-    long v = -1;
-    if (fscanf(f, "%ld", &v) != 1)
-        v = -1;
-    fclose(f);
-    return v;
-}
-
-// Total st_lsm6dsx interrupts across CPUs, from /proc/interrupts.
-static long lsm_irq_count() {
-    std::ifstream f("/proc/interrupts");
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.find("lsm6dsx") == std::string::npos)
-            continue;
-        std::istringstream ss(line);
-        std::string irq;
-        ss >> irq;
-        long sum = 0, v;
-        while (ss >> v)
-            sum += v; // stops at the chip name
-        return sum;
+namespace vio {
+namespace {
+class OpenVinsRunner final : public EstimatorRunner {
+public:
+    OpenVinsRunner(const std::filesystem::path& config, const std::string& verbosity) {
+        auto parser = std::make_shared<ov_core::YamlParser>(config.string());
+        ov_core::Printer::setPrintLevel("INFO");
+        ov_msckf::VioManagerOptions params;
+        params.print_and_load(parser);
+        params.use_multi_threading_subs = false;
+        if (!parser->successful())
+            die("OpenVINS could not parse " + config.string());
+        if (params.camera_intrinsics.at(0)->w() != 1280 ||
+            params.camera_intrinsics.at(0)->h() != 800)
+            die("config resolution does not match the camera stream");
+        // OpenVINS has already inverted T_imu_cam when loading this calibration.
+        camera_from_imu_ = ov_core::quat_2_Rot(params.camera_extrinsics.at(0).head<4>());
+        state_.sys = std::make_shared<LoggedVioManager>(params);
+        state_.run_verbosity = verbosity;
     }
-    return -1;
-}
-
-// ---------------------------------------------------------------- main
-
-int main(int argc, char** argv) {
-    std::string imu_cfg, frames_fifo, meta_fifo, config, out_path, record, verbosity = "WARNING",
-                                                                           init_verbosity = "INFO";
-    size_t max_queue = 10;
-    double imu_lpf_hz = 0, imu_rate_hz = 440;
-    Shared S;
-    for (int i = 1; i < argc; i++) {
-        std::string a = argv[i];
-        auto next = [&]() -> std::string {
-            if (i + 1 >= argc)
-                die("missing value for " + a);
-            return argv[++i];
-        };
-        if (a == "--imu")
-            imu_cfg = next();
-        else if (a == "--frames")
-            frames_fifo = next();
-        else if (a == "--meta")
-            meta_fifo = next();
-        else if (a == "--config")
-            config = next();
-        else if (a == "--out")
-            out_path = next();
-        else if (a == "--record")
-            record = next();
-        else if (a == "--verbosity")
-            verbosity = next();
-        else if (a == "--init-verbosity")
-            init_verbosity = next();
-        else if (a == "--width")
-            S.W = std::stoi(next());
-        else if (a == "--height")
-            S.H = std::stoi(next());
-        else if (a == "--max-queue")
-            max_queue = std::stoul(next());
-        else if (a == "--imu-lpf")
-            imu_lpf_hz = std::stod(next());
-        else if (a == "--imu-rate")
-            imu_rate_hz = std::stod(next());
-        else
-            die("unknown argument " + a);
+    Eigen::Matrix3d camera_from_imu() const override {
+        return camera_from_imu_;
     }
-    if (imu_cfg.empty() || frames_fifo.empty() || meta_fifo.empty() || config.empty() ||
-        out_path.empty())
-        die("usage: vio_live --imu FILE --frames FIFO --meta FIFO --config YAML --out FILE "
-            "[--record PREFIX]"
-            " [--imu-lpf HZ [--imu-rate HZ]]");
-    if (imu_lpf_hz > 0) {
-        if (imu_lpf_hz >= 0.45 * imu_rate_hz)
-            die("--imu-lpf must sit well below half of --imu-rate");
-        S.lpf.design(imu_lpf_hz, imu_rate_hz);
-        printf("IMU low-pass %.0f Hz (2nd-order Butterworth at %.0f Hz): IMU timestamps shifted by "
-               "-%.2f ms\n",
-               imu_lpf_hz, imu_rate_hz, S.lpf.delay_ns * 1e-6);
-        fflush(stdout);
+    void run(const RunnerOptions& options, std::atomic<bool>& stop,
+             LatestEstimate& estimates) override;
+
+private:
+    Shared state_;
+    Eigen::Matrix3d camera_from_imu_;
+};
+
+/// Close capture files/descriptors after the workers that use them have joined.
+struct CaptureFiles {
+    std::vector<int> descriptors;
+    std::vector<FILE*> files;
+    ~CaptureFiles() {
+        for (auto* file : files)
+            fclose(file);
+        for (int fd : descriptors)
+            close(fd);
     }
+    FILE* output(const std::string& path, const char* mode) {
+        auto* file = fopen(path.c_str(), mode);
+        if (!file)
+            die("cannot open " + path);
+        files.push_back(file);
+        return file;
+    }
+    int input(const std::string& path) {
+        int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0)
+            die("cannot open " + path + ": " + strerror(errno));
+        descriptors.push_back(fd);
+        return fd;
+    }
+};
 
-    struct sigaction sa{};
-    sa.sa_handler = on_signal;
-    sigaction(SIGINT, &sa, nullptr);
-    sigaction(SIGTERM, &sa, nullptr);
-
-    // OpenVINS, loaded exactly as run_subscribe_msckf does it.
-    auto parser = std::make_shared<ov_core::YamlParser>(config);
-    ov_core::Printer::setPrintLevel(init_verbosity);
-    S.run_verbosity = verbosity;
-    ov_msckf::VioManagerOptions params;
-    params.print_and_load(parser);
-    params.use_multi_threading_subs = true;
-    if (!parser->successful())
-        die("OpenVINS could not parse " + config + " -- see the output above");
-    S.sys = std::make_shared<LoggedVioManager>(params);
-    if (params.camera_intrinsics.at(0)->w() != S.W || params.camera_intrinsics.at(0)->h() != S.H)
-        die("config resolution does not match the camera stream");
-
-    std::vector<ImuDev> devs;
-    {
-        std::ifstream f(imu_cfg);
-        std::string line;
-        while (std::getline(f, line)) {
-            if (line.empty() || line[0] == '#')
-                continue;
-            std::istringstream ss(line);
-            ImuDev d;
-            if (!(ss >> d.kind >> d.chardev >> d.rec >> d.scale >> d.ts_off >> d.x_off >> d.y_off >>
-                  d.z_off))
-                die("bad --imu line: " + line);
-            d.fd = open(d.chardev.c_str(), O_RDONLY | O_NONBLOCK);
-            if (d.fd < 0)
-                die("open " + d.chardev + ": " + strerror(errno) + " (run as root)");
-            if (!record.empty()) {
-                d.rec_fp = fopen((record + ".imu_" + d.kind + ".bin").c_str(), "wb");
-                if (!d.rec_fp)
-                    die("cannot write recording for " + d.kind);
+/// Catch worker failures, request a shared stop, and join even on partial startup.
+struct Workers {
+    std::atomic<bool>& stop;
+    std::mutex mutex;
+    std::exception_ptr error;
+    std::vector<std::thread> threads;
+    explicit Workers(std::atomic<bool>& flag) : stop(flag) {}
+    void launch(std::function<void()> work) {
+        threads.emplace_back([this, work = std::move(work)] {
+            try {
+                work();
+            } catch (...) {
+                {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    if (!error)
+                        error = std::current_exception();
+                }
+                stop = true;
             }
-            devs.push_back(d);
-        }
+        });
     }
+    void join() {
+        for (auto& thread : threads)
+            if (thread.joinable())
+                thread.join();
+    }
+    ~Workers() {
+        stop = true;
+        join();
+    }
+};
+} // namespace
 
-    FILE* out = fopen(out_path.c_str(), "w");
-    if (!out)
-        die("cannot write " + out_path);
-    fprintf(out, "# timestamp(s) q(JPL xyzw) p v bg ba -- vio_live, OpenVINS state after each "
-                 "processed frame\n");
-
-    FILE *y16 = nullptr, *meta_json = nullptr;
-    if (!record.empty()) {
-        y16 = fopen((record + ".y16").c_str(), "wb");
-        if (!y16)
-            die("cannot write " + record + ".y16");
+/// Run one capture inside this process; snapshots leave through the one-slot mailbox.
+void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
+                         LatestEstimate& estimates) {
+    Shared& S = state_;
+    S.stop = &stop;
+    S.estimates = &estimates;
+    S.generation = options.generation;
+    if (options.imu_lpf_hz > 0) {
+        if (options.imu_lpf_hz >= 0.45 * options.imu_rate_hz)
+            die("IMU filter cutoff too high");
+        S.lpf.design(options.imu_lpf_hz, options.imu_rate_hz);
+    }
+    if (options.max_camera_queue == 0 || options.max_camera_queue > 100)
+        die("camera queue must hold 1..100 frames");
+    if (options.devices.size() != 2 || options.devices[0].kind == options.devices[1].kind)
+        die("capture requires one accelerometer and one gyroscope");
+    for (const auto& d : options.devices) {
+        if ((d.kind != "accel" && d.kind != "gyro") || d.record_bytes < 8 ||
+            d.record_bytes > 65536 || d.timestamp_offset < 0 ||
+            d.timestamp_offset > d.record_bytes - 8 || !std::isfinite(d.scale) || d.scale <= 0)
+            die("invalid IMU record description");
+        for (int offset : d.axis_offsets)
+            if (offset < 0 || offset > d.record_bytes - 2)
+                die("invalid IMU axis offset");
+    }
+    CaptureFiles files;
+    std::vector<ImuDev> devs;
+    for (const auto& device : options.devices) {
+        ImuDev d;
+        d.kind = device.kind;
+        d.chardev = device.chardev.string();
+        d.rec = device.record_bytes;
+        d.scale = device.scale;
+        d.ts_off = device.timestamp_offset;
+        d.x_off = device.axis_offsets[0];
+        d.y_off = device.axis_offsets[1];
+        d.z_off = device.axis_offsets[2];
+        d.fd = files.input(d.chardev);
+        if (!options.recording_prefix.empty())
+            d.rec_fp =
+                files.output(options.recording_prefix.string() + ".imu_" + d.kind + ".bin", "wb");
+        devs.push_back(d);
+    }
+    FILE* out =
+        options.estimate_log.empty() ? nullptr : files.output(options.estimate_log.string(), "w");
+    if (out)
+        fprintf(out, "# timestamp(s) q(JPL xyzw) p v bg ba\n");
+    FILE* y16 = nullptr;
+    FILE* meta_json = nullptr;
+    if (!options.recording_prefix.empty()) {
+        y16 = files.output(options.recording_prefix.string() + ".y16", "wb");
         setvbuf(y16, nullptr, _IOFBF, 8 << 20);
-        meta_json = fopen((record + ".meta.json").c_str(), "w");
-        if (!meta_json)
-            die("cannot write " + record + ".meta.json");
+        meta_json = files.output(options.recording_prefix.string() + ".meta.json", "w");
         fprintf(meta_json, "[\n");
+        S.features.start(options.recording_prefix.string() + ".features.jsonl");
     }
-
-    if (!record.empty())
-        S.features.start(record + ".features.jsonl");
-
-    std::thread ti(imu_thread, std::ref(S), std::ref(devs));
-    std::thread tu(update_thread, std::ref(S), out);
-    printf("vio_live: estimator up; waiting for the camera\n");
-    fflush(stdout);
-    // Non-blocking opens. A blocking open of one FIFO waits for its writer, and
-    // rpicam-raw opens its two outputs in its own order, blocking on each until
-    // there is a reader -- open them in the other order and both sides wait
-    // forever. Linux reports no POLLHUP on a FIFO until a writer has come and
-    // gone, so read_some's poll simply waits for rpicam-raw to connect.
-    int mfd = open(meta_fifo.c_str(), O_RDONLY | O_NONBLOCK);
-    int ffd = open(frames_fifo.c_str(), O_RDONLY | O_NONBLOCK);
-    if (mfd < 0 || ffd < 0)
-        die("cannot open the camera FIFOs");
-    std::thread tm(meta_thread, std::ref(S), mfd);
-    std::thread tf(frame_thread, std::ref(S), ffd, y16, meta_json, max_queue);
-
-    const int64_t start = now_ns();
-    long last_imu = 0, last_in = 0, last_done = 0, last_irq = lsm_irq_count();
-    double last_sum = 0;
-    int64_t last_t = start;
-    bool frames_finished = false;
-    while (!frames_finished) {
-        for (int i = 0; i < 20 && !frames_finished; i++) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::lock_guard<std::mutex> lk(S.q_mtx);
-            frames_finished = S.frames_done;
+    int mfd = files.input(options.metadata.string());
+    int ffd = files.input(options.frames.string());
+    Workers workers(stop);
+    workers.launch([&] { imu_thread(S, devs); });
+    workers.launch([&] { update_thread(S, out); });
+    workers.launch([&] { meta_thread(S, mfd); });
+    workers.launch([&] { frame_thread(S, ffd, y16, meta_json, options.max_camera_queue); });
+    const auto start = now_ns();
+    bool imu_stalled = false;
+    while (!stop) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        {
+            std::lock_guard<std::mutex> lock(S.q_mtx);
+            if (S.frames_done)
+                break;
         }
-        int64_t t = now_ns();
-        double dt = (t - last_t) * 1e-9;
-        long imu = S.imu_n, in = S.frames_in, done = S.frames_done_n;
-        double sum = S.upd_ms_sum;
-        double avg = (done > last_done) ? (sum - last_sum) / double(done - last_done) : 0;
-        std::lock_guard<std::mutex> lk(S.st_mtx);
-        printf(
-            "[%6.1f s] imu %3.0f Hz | cam %4.1f in %4.1f done fps, %ld dropped | update %4.0f ms "
-            "avg %4.0f max | lag %4.0f ms | %s",
-            (t - start) * 1e-9, (imu - last_imu) / dt, (in - last_in) / dt, (done - last_done) / dt,
-            long(S.frames_dropped), avg, double(S.upd_ms_max), double(S.lag_ms_last),
-            S.init
-                ? ""
-                : (S.vio_init ? "INITIALIZED\n" : "not initialized yet -- keep the rig still\n"));
-        if (S.init)
-            printf("p %+6.2f %+6.2f %+6.2f m  |v| %.2f m/s  path %.1f m\n", S.p_last(0),
-                   S.p_last(1), S.p_last(2), S.v_last.norm(), S.path_m);
-        long irq = lsm_irq_count();
-        std::string kbuf;
-        for (auto& d : devs) {
-            std::string node = d.chardev.substr(d.chardev.rfind('/') + 1);
-            kbuf += (kbuf.empty() ? "" : "/") +
-                    std::to_string(
-                        read_long("/sys/bus/iio/devices/" + node + "/buffer0/data_available"));
+        if (now_ns() - start > 3000000000LL &&
+            (S.last_imu_ns == 0 || now_ns() - S.last_imu_ns > 2000000000LL)) {
+            imu_stalled = true;
+            stop = true;
+            break;
         }
-        printf("           diag: irq %4.0f/s | kernel buffer %s samples | imu thread last seen "
-               "%4.0f ms ago | feed max %5.2f ms | read gap max %4.0f ms\n",
-               last_irq >= 0 && irq >= 0 ? (irq - last_irq) / dt : -1.0, kbuf.c_str(),
-               (now_ns() - S.imu_loop_ns) * 1e-6, double(S.feed_ms_max), double(S.read_gap_ms_max));
-        fflush(stdout);
-        last_imu = imu;
-        last_in = in;
-        last_done = done;
-        last_sum = sum;
-        last_t = t;
-        last_irq = irq;
-        S.upd_ms_max = 0;
-        S.feed_ms_max = 0;
-        S.read_gap_ms_max = 0;
     }
-
-    tf.join();
-    tu.join();
+    stop = true;
+    S.q_cv.notify_all();
+    S.meta_cv.notify_all();
+    workers.join();
     S.features.close();
-    printf("  feature logging dropped %zu records\n", S.features.dropped.load());
-    g_stop = true; // camera is finished: stop the IMU and metadata readers
-    ti.join();
-    tm.join();
-
-    fclose(out);
-    for (auto& d : devs) {
-        if (d.rec_fp)
-            fclose(d.rec_fp);
-        close(d.fd);
-    }
-    if (y16)
-        fclose(y16);
-    if (meta_json) {
+    if (meta_json)
         fprintf(meta_json, "\n]\n");
-        fclose(meta_json);
-    }
-
-    printf("\n=== vio_live summary ===\n");
-    printf("  frames   %ld received, %ld processed, %ld dropped; update %.0f ms avg\n",
-           long(S.frames_in), long(S.frames_done_n), long(S.frames_dropped),
-           S.frames_done_n ? S.upd_ms_sum / double(S.frames_done_n) : 0.0);
-    if (S.init) {
-        Eigen::Vector3d d = S.p_last - S.p_first;
-        printf("  path     %.2f m since initialization\n", S.path_m);
-        printf("  closure  %.3f m = %.2f %% of path (end minus first initialized position; run "
-               "vio_closure.py for the at-rest average)\n",
-               d.norm(), S.path_m > 0 ? 100 * d.norm() / S.path_m : 0.0);
-    } else if (S.vio_init) {
-        printf("  initialized, but no pose was written\n");
-    } else {
-        printf("  NEVER INITIALIZED -- the rig must rest still for a few seconds first\n");
-    }
-    printf("  estimate %s\n", out_path.c_str());
-    return 0;
+    if (workers.error)
+        std::rethrow_exception(workers.error);
+    if (imu_stalled)
+        die("IMU samples stopped advancing");
+    printf("vio_live: %ld frames received, %ld processed, %ld dropped\n", long(S.frames_in),
+           long(S.frames_done_n), long(S.frames_dropped));
 }
+
+std::unique_ptr<EstimatorRunner> make_openvins_runner(const std::filesystem::path& config,
+                                                      const std::string& verbosity) {
+    return std::make_unique<OpenVinsRunner>(config, verbosity);
+}
+} // namespace vio

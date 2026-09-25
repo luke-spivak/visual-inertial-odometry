@@ -45,6 +45,10 @@ public:
 
     /// Before alignment, estimates may prime a fresh, disarmed controller only.
     bool can_publish(MonotonicTime now) const;
+    /// Capture startup/restart requires a recently confirmed disarmed controller.
+    bool controller_disarmed(MonotonicTime now) const {
+        return controller_fresh(now) && !armed_;
+    }
     bool alignment_due(MonotonicTime now) const;
     void measurement_sent(MonotonicTime timestamp);
     /// Called only after the entire command frame has been written to the transport.

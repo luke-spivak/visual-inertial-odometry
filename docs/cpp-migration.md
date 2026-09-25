@@ -12,18 +12,22 @@ control and failsafes; systemd owns application startup and process restart.
    and numeric/freshness validation. `src/frames.*` converts immutable-by-contract
    estimate snapshots to ArduPilot measurements and computes stationary IMU
    acceleration. Calibration is an input, not a compiled aircraft constant.
-   This library is tested independently and is not yet connected to live flight.
+   This library is used by the new native application and tested independently.
 2. **Implemented as a tested library: MAVLink transport and flight-session policy.**
    `serial_port.*` owns an exclusive nonblocking POSIX UART. `mavlink_link.*` uses
    pinned generated MAVLink headers, typed snapshots, and a fixed transmit buffer.
    `flight_session.*` owns controller freshness, alignment, generations, and reset
    counters. Fake-FC, pseudoterminal, and recorded-input tests pass. This code is
-   not wired into the running estimator or service; physical transmission remains
-   gated on integration and hardware checks. Never run two publishers against the FC.
-3. **Next: application integration.** Move IIO setup and capture supervision into the C++ application. Verify startup,
-   partial-startup cleanup, disarmed alignment, restart, and signal handling. Keep
-   `rpicam-raw` as a temporary camera adapter.
-4. Replace `rpicam-raw` with libcamera. Verify actual Pi pixel layout/stride, sensor
+   wired into the native executable; the deployed service still uses Python.
+   Physical flight use remains gated on hardware checks. Never run two publishers against the FC.
+3. **Implemented, hardware validation pending: native application integration.**
+   `flight_main.cpp` / `flight_application.*` own startup, capture, and recovery.
+   `imu_device.*` discovers/configures IIO and disables owned buffers on failure.
+   `process.*` owns the camera process group, FIFOs, application lock, and durable
+   reset-counter reservations. OpenVINS runs in-process through `estimator_runner.h`,
+   handing copied snapshots to the MAVLink loop. `rpicam-raw` remains the temporary
+   camera adapter. Linux ARM64 builds and simulated lifecycle/signal tests pass.
+4. **Next sensor-backend stage:** replace `rpicam-raw` with libcamera. Verify actual Pi pixel layout/stride, sensor
    timestamps and timebase, exposure settling, calibration, and buffer ownership.
    This is a separate hardware gate, not assumed equivalent from compilation.
 5. Isolate recording behind bounded queues. Inject slow/full storage and interrupted
@@ -68,7 +72,7 @@ The communication loop owns `MavlinkLink`, calls `start_session(generation)` onc
 per new estimator frame, then calls `poll(now)` and `publish(snapshot, now)`.
 `publish` returns `Queued`, `Held`, `InvalidEstimate`, `OutOfOrder`, or `Busy`.
 The estimator remains independent: it hands over value snapshots, never a file
-path or access to its mutable state. The next stage must supply that handoff.
+path or access to its mutable state. The native application's communication loop now supplies that handoff.
 
 - Controller system/component IDs are configured explicitly (default 1/1), and
   heartbeats must identify ArduPilot rather than a GCS. The source defaults to
@@ -108,22 +112,24 @@ path or access to its mutable state. The next stage must supply that handoff.
   covariance markers, and the same reset byte. Nonfinite values and doubles outside
   float range are rejected before serialization. Per-link parser and sequence state
   avoid shared global MAVLink channels.
-- The application's next stage must persist/reserve the initial reset byte across
-  process restarts, load calibration/configuration, copy estimates under the correct
-  ownership, and arrange shutdown and recovery. The current library accepts the
-  initial byte as an input; it does not silently invent cross-process persistence.
+- `SessionStore` now reserves the reset byte with file/directory fsync and atomic
+  rename before each native session can publish. Its process lock excludes a second
+  native owner. A malformed counter is an error, not a silent reset to zero.
+- The native application calls `end_session()` before cleanup, withdrawing queued
+  measurements while keeping controller monitoring available. Due alignment and
+  heartbeat packets get priority over newly offered estimates.
 
 Protocol references: [MAVLink command protocol](https://mavlink.io/en/services/command.html)
 and [ArduPilot auxiliary functions](https://ardupilot.org/copter/docs/common-auxiliary-functions.html).
 
 ## Build and test the native libraries
 
-Requires CMake, a C++17 compiler, Eigen, and POSIX serial APIs. CMake fetches the
+Requires CMake, a C++17 compiler, Eigen, nlohmann-json 3.11+, and POSIX serial APIs. CMake fetches the
 ArduPilotMega generated MAVLink C headers at revision
 `c1fd65eb702106097a4253c259aba34a18235848`, with a pinned archive SHA-256. For an
 offline build, extract that revision and pass
 `-DVIO_MAVLINK_INCLUDE_DIR=/absolute/path/to/c_library_v2`.
-Neither library requires OpenVINS, libcamera, the Pi, or a flight controller:
+The default library/test build requires no OpenVINS, libcamera, Pi, or flight controller:
 
 ```sh
 cmake -S src -B build/native-core -DCMAKE_BUILD_TYPE=Release
@@ -131,15 +137,69 @@ cmake --build build/native-core
 ctest --test-dir build/native-core --output-on-failure
 ```
 
-The existing onboard build remains `src/openvins_runner/CMakeLists.txt` and the
-current deployment scripts still use it. `src/CMakeLists.txt` currently builds
-the native core, flight-link library, and tests, not a flight executable.
+To build the native application inside the Linux build environment, also provide
+its existing OpenVINS source/library and enable the executable:
 
-Validation to date: native macOS Release and AddressSanitizer/UndefinedBehaviorSanitizer
-builds pass all three CTest targets. Tests cover frame conversion, raw pseudoterminal
-I/O and hangup, fragmented/corrupt packets, controller/ACK filtering, timeout/retry
-policy, arming, resets, stale/invalid estimates, bounded input/output, and partial-write
-failures. The fake FC also decodes all 7,623 estimates from the checked-in
-`results/flight-review-2026-09-15/pi/run-20260915-121608.est.txt` recording. Replay
-uses recorded timestamps as a virtual clock; file parsing is test-only.
-Pi/Linux builds and physical-FC verification remain outstanding.
+```sh
+cmake -S src -B build/native-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DVIO_BUILD_FLIGHT_APP=ON \
+  -DOV_SRC=/work/build/vio_live/open_vins \
+  -DOV_LIB=/work/build/vio_live/ov/libov_msckf_lib.so
+cmake --build build/native-linux -j2
+ctest --test-dir build/native-linux --output-on-failure
+```
+
+The resulting executable takes one argument: the path to `flight.json`. It retains
+the same configuration schema, including the legacy `estimator_binary` field for
+Python compatibility; native capture does not launch that binary. It requires a
+positive freshness limit and a filter cutoff below 45% of the configured 416 Hz
+IIO rate. The old standalone `src/openvins_runner` build still produces `vio_live`
+through a compatibility entry point. Deployment scripts and `vio@.service` have
+not been switched to the native application.
+
+## Native lifecycle and remaining gates
+
+The application loads flight settings once, acquires its runtime-directory lock,
+loads the estimator calibration, and opens its UART. Each capture waits for a
+fresh disarmed heartbeat, selects exposure, configures IIO, and starts the camera
+and estimator workers. Fixed, automatic, and swept exposure retain the Python
+selection policy. No Python process participates in this native path.
+
+One estimator worker feeds IMU samples and camera updates to OpenVINS, including
+initialization; its initializer is joined rather than detached. Acquisition workers
+use bounded queues (1024 IMU samples, 10 camera frames, 128 timestamps). IMU overflow
+fails the capture instead of silently dropping samples. The communication loop
+reads a one-slot snapshot mailbox every 5 ms; estimate files are recordings only.
+Camera calibration comes from OpenVINS's parsed IMU-to-camera rotation, with a test
+against the checked-in calibration to catch a second inversion.
+
+SIGINT/SIGTERM request ordinary cleanup. The camera receives SIGINT, with bounded
+escalation to SIGKILL; acquisition workers observe the shared stop flag and are
+joined before files, FIFOs, or IMU buffers are released. Capture failures retry with
+bounded exponential backoff and require a fresh disarmed controller. An unresolved
+alignment or link failure requires process-level recovery rather than silently
+starting another session. The counter is reserved before each attempt, including
+attempts that fail during startup.
+
+The native path saves flight/exposure/IMU metadata and the existing recording file
+formats. Completion markers require successful recording shutdown and camera exit.
+Full recording isolation is still step 5: raw frame/IMU/estimate writes remain
+synchronous, and a blocked filesystem or an OpenVINS call can delay a worker join.
+A process-level stop timeout is still needed at deployment; no thread is forcibly
+killed while it owns estimator state. Recording ownership/permissions under the
+final service account also need verification before cutover.
+
+Validation: macOS Release and ASan/UBSan pass the five library/lifecycle CTest
+programs. Linux ARM64 builds the actual OpenVINS adapter, `vio_flight`, and legacy
+`vio_live`; its tests additionally exercise calibration direction, worker-failure
+unwinding, real SIGINT/SIGTERM, and duplicate application exclusion using a virtual
+UART. Lifecycle tests use a fake FC, estimator, camera executable, and sysfs tree:
+normal shutdown, armed startup, disarmed restart, camera exec failure, failed IIO
+setup, stubborn children, exposure selection, and persisted reset bytes are covered.
+The existing 7,623-estimate flight replay remains part of the MAVLink tests.
+
+Pi hardware gates remain: sensor timing and filter behavior at the read-back IIO
+rate, CPU/queue performance with serialized OpenVINS ownership, real camera FIFO
+startup/shutdown, UART buffering, FC boot detection and alignment semantics, and
+signal/error cleanup under load. The Python service remains the deployment default
+until those checks and the later camera/recording stages are complete.

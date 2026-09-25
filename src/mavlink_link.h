@@ -46,10 +46,15 @@ public:
     MavlinkLink(std::unique_ptr<ByteStream> stream, MavlinkLinkConfig config,
                 FrameTransform transform, std::uint8_t initial_reset_counter = 0);
     void start_session(SessionGeneration generation);
+    /// Stop publishing during capture cleanup; retain FC monitoring for a disarmed restart.
+    void end_session();
 
     /// Bounded work: at most 4096 input bytes and one nonblocking write per call.
     /// I/O failure latches Failed and releases the stream; inspect state() to stop.
     void poll(MonotonicTime now);
+    bool controller_disarmed(MonotonicTime now) const {
+        return session_.controller_disarmed(now);
+    }
 
     /// Queue one pose/velocity pair. Busy applies backpressure without a backlog.
     /// The caller should offer its newest snapshot again after poll() makes space.

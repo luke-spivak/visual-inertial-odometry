@@ -24,11 +24,14 @@ find_package(Ceres REQUIRED)
 # flag, and a mismatch is a silent layout difference, not a link error.
 add_definitions(-DENABLE_ARUCO_TAGS=0)
 
-add_executable(vio_live sensor_runner.cpp)
-target_include_directories(vio_live PRIVATE
+add_library(vio_openvins sensor_runner.cpp)
+add_executable(vio_live legacy_main.cpp)
+target_link_libraries(vio_live PRIVATE vio_openvins)
+target_include_directories(vio_openvins PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${OV_SRC}/ov_core/src ${OV_SRC}/ov_init/src ${OV_SRC}/ov_msckf/src
     ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})
-target_link_libraries(vio_live PRIVATE ${OV_LIB} ${OpenCV_LIBRARIES}
+target_link_libraries(vio_openvins PUBLIC ${OV_LIB} ${OpenCV_LIBRARIES}
     Boost::system Boost::filesystem Boost::thread Boost::date_time ${CERES_LIBRARIES} pthread)
 # Libraries the Pi lacks ship beside the binary in lib/.
 set_target_properties(vio_live PROPERTIES BUILD_RPATH "\$ORIGIN/lib")

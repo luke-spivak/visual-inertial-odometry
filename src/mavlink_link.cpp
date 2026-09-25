@@ -44,6 +44,15 @@ void MavlinkLink::start_session(SessionGeneration generation) {
     started_ = true;
 }
 
+/// Withdraw queued capture data before cleanup; a partial packet forces link recovery.
+void MavlinkLink::end_session() {
+    started_ = false;
+    if (pending_offset_ != 0)
+        fail("capture ended during partial transmission");
+    else
+        clear_pending();
+}
+
 /// Handle one decoded packet from the configured flight controller.
 /// Feed its heartbeat or relevant alignment acknowledgment into the session policy.
 void MavlinkLink::receive(const mavlink_message_t& message, MonotonicTime now) {
@@ -84,7 +93,7 @@ void MavlinkLink::append(const mavlink_message_t& message) {
 
 /// Validate a snapshot, convert its coordinates, and queue pose/velocity packets.
 /// Return why it was held or rejected if it cannot be queued. poll() does the I/O;
-/// currently only tests call this function, pending live estimator integration.
+/// the application communication loop supplies copied estimator snapshots.
 PublishResult MavlinkLink::publish(const EstimatorEstimate& estimate, MonotonicTime now) {
     session_.tick(now);
     if (!started_ || !stream_ || !session_.can_publish(now))
@@ -94,7 +103,9 @@ PublishResult MavlinkLink::publish(const EstimatorEstimate& estimate, MonotonicT
         return PublishResult::InvalidEstimate;
     if (last_estimate_time_ && estimate.timestamp <= *last_estimate_time_)
         return PublishResult::OutOfOrder;
-    if (pending_kind_ != PendingKind::None)
+    // Reserve the next poll for due control traffic instead of letting a fast
+    // estimator continually refill the buffer and starve alignment/heartbeats.
+    if (pending_kind_ != PendingKind::None || session_.alignment_due(now) || now >= next_heartbeat_)
         return PublishResult::Busy;
     const auto measurement = transform_.transform(estimate);
     if (!fits_wire(measurement.position_ned_m) || !fits_wire(measurement.velocity_ned_mps) ||
@@ -213,7 +224,7 @@ void MavlinkLink::poll(MonotonicTime now) {
         if (count == input.size())
             return;
         if (pending_kind_ == PendingKind::None) {
-            if (session_.alignment_due(now))
+            if (started_ && session_.alignment_due(now))
                 queue_alignment(now);
             else if (now >= next_heartbeat_)
                 queue_heartbeat(now);
