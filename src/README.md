@@ -68,7 +68,9 @@ YAML; `estimator_config` points to it rather than duplicating it.
 The service loads this file once. Each capture session receives a resolved
 `<prefix>.flight.json` snapshot; restart the supervisor to apply settings changes.
 Bench capture writes the same snapshot, even without raw recording. Missing,
-unknown, mistyped, and invalid settings fail before hardware access.
+unknown, mistyped, and invalid settings fail before hardware access. Runtime code
+keeps a frozen `FlightConfig` object; CLI options such as duration and output
+prefix stay separate and are never included in aircraft snapshots.
 
 ```sh
 sudo python3 src/flight_supervisor.py

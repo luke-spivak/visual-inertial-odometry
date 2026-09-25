@@ -4,7 +4,7 @@
 Waits for the flight controller, aligns new estimator frames, and restarts capture.
 """
 from cli import parse_options
-from flight_config import save_config
+from flight_config import FlightConfig, save_config
 import os
 import pwd
 import shutil
@@ -135,13 +135,13 @@ def keep(tmp, dst, user):
         log(f"could not copy {tmp} to {dst} ({e}); it stays on tmpfs until reboot")
 
 
-def run(a, link, sender, user, vio_cmd, n):
+def run(config: FlightConfig, link, sender, user, vio_cmd, n):
     """One capture_session.py run, until it ends. Returns how many poses reached the FC."""
-    prefix = new_prefix(a.recording_dir)
+    prefix = new_prefix(config.recording_dir)
     # Keep live poses on tmpfs so recording capacity does not gate pose delivery.
-    est = os.path.join(a.estimate_dir, os.path.basename(prefix) + ".est.txt")
-    free_gb = shutil.disk_usage(a.recording_dir).free / 1e9
-    record = free_gb >= a.min_free_gb
+    est = os.path.join(config.estimate_dir, os.path.basename(prefix) + ".est.txt")
+    free_gb = shutil.disk_usage(config.recording_dir).free / 1e9
+    record = free_gb >= config.min_free_gb
     log(f"run {n}: {prefix}, reset counter {sender.reset_counter}")
     link.say(SEV_INFO if record else SEV_WARNING,
              f"VIO run {n} " + (f"recording, {free_gb:.0f} GB free" if record
@@ -149,7 +149,7 @@ def run(a, link, sender, user, vio_cmd, n):
     # Pin each child to the settings loaded by this supervisor, even if the
     # source config is edited before a restart. The snapshot also supports replay.
     config_path = prefix + ".flight.json"
-    save_config(a, config_path)
+    save_config(config, config_path)
     with open(prefix + ".log", "w") as out:
         child = subprocess.Popen(vio_cmd + [prefix, "--config", config_path, "--est", est] + ([] if record else ["--no-record"]),
                                  stdout=out, stderr=subprocess.STDOUT)
@@ -209,18 +209,18 @@ def run(a, link, sender, user, vio_cmd, n):
     return sent
 
 
-def fly(a, link, user, vio_cmd):
+def fly(config: FlightConfig, link, user, vio_cmd):
     """One capture_session.py run after another, each once the FC is there, until STOP."""
-    os.makedirs(a.estimate_dir, exist_ok=True)
-    counter = os.path.join(a.estimate_dir, "reset_counter")
-    sender = mavlink_bridge.Sender(link.conn, a.tilt_deg, a.upside_down, a.send_velocity, a.max_lag,
+    os.makedirs(config.estimate_dir, exist_ok=True)
+    counter = os.path.join(config.estimate_dir, "reset_counter")
+    sender = mavlink_bridge.Sender(link.conn, config.tilt_deg, config.upside_down, config.send_velocity, config.max_lag,
                                     reset_counter=load_counter(counter))
     n, backoff, waiting = 0, 5.0, False
     while STOP["sig"] is None:
         link.poll()
         if not link.fresh():
             if not waiting:
-                log(f"waiting for the FC's heartbeat on {a.device}")
+                log(f"waiting for the FC's heartbeat on {config.device}")
                 waiting = True
             time.sleep(0.1)
             continue
@@ -231,7 +231,7 @@ def fly(a, link, user, vio_cmd):
             sender.new_run()
         with open(counter, "w") as f:
             f.write(str(sender.reset_counter))
-        sent = run(a, link, sender, user, vio_cmd, n)
+        sent = run(config, link, sender, user, vio_cmd, n)
         # A run that never streamed failed at startup (too dark, IMU, camera):
         # retry, but back off rather than fill ~/vio with attempts.
         wait = 2.0 if sent else backoff
@@ -245,12 +245,12 @@ def fly(a, link, user, vio_cmd):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    a = parse_options("flight", user.pw_dir)
+    config, _ = parse_options("flight", user.pw_dir)
     if os.geteuid() != 0:
         sys.exit("FAIL: capture_session.py needs root for the IMU: run with sudo (vio@.service does)")
-    if not os.path.isdir(a.recording_dir):
-        os.makedirs(a.recording_dir)
-        os.chown(a.recording_dir, user.pw_uid, user.pw_gid)
+    if not os.path.isdir(config.recording_dir):
+        os.makedirs(config.recording_dir)
+        os.chown(config.recording_dir, user.pw_uid, user.pw_gid)
     # vio@.service runs this as root, and pymavlink is usually a --user install of
     # the account that ran mavlink_bridge.py by hand: look there too.
     site = os.path.join(user.pw_dir, ".local", "lib", "python%d.%d" % sys.version_info[:2], "site-packages")
@@ -261,13 +261,13 @@ def main():
         from pymavlink import mavutil
     except ImportError:
         sys.exit(f"FAIL: no pymavlink for root or {user.pw_name}: pip install pymavlink as {user.pw_name}")
-    conn = mavutil.mavlink_connection(a.device, baud=a.baud, source_system=1, source_component=197)
-    log(f"MAVLink {a.device} @ {a.baud}; runs in {a.recording_dir}; camera {a.tilt_deg:g} deg nose-down, "
-        f"{'upside-down' if a.upside_down else 'upright'}")
+    conn = mavutil.mavlink_connection(config.device, baud=config.baud, source_system=1, source_component=197)
+    log(f"MAVLink {config.device} @ {config.baud}; runs in {config.recording_dir}; camera {config.tilt_deg:g} deg nose-down, "
+        f"{'upside-down' if config.upside_down else 'upright'}")
     signal.signal(signal.SIGTERM, lambda s, f: STOP.update(sig=s))
     signal.signal(signal.SIGINT, lambda s, f: STOP.update(sig=s))
     vio_cmd = [sys.executable, "-u", os.path.join(HERE, "capture_session.py")]
-    fly(a, Link(conn), user, vio_cmd)
+    fly(config, Link(conn), user, vio_cmd)
 
 
 if __name__ == "__main__":

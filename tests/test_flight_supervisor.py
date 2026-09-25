@@ -6,6 +6,7 @@ The one that matters is the restart: a new run's frame has an arbitrary yaw, so 
 poses must not reach an armed aircraft until Viso Align has been accepted for it."""
 import os
 import json
+from dataclasses import replace
 import pwd
 import signal
 import sys
@@ -98,9 +99,9 @@ def start(tmp, fc, min_free_gb=0.0):
     fake = os.path.join(tmp, "fake_capture_session.py")
     with open(fake, "w") as f:
         f.write(FAKE_VIO_LIVE)
-    a = parse_options("flight", tmp, [])
-    a.recording_dir, a.estimate_dir = os.path.join(tmp, "vio"), os.path.join(tmp, "run")
-    a.device, a.min_free_gb = "fake", min_free_gb
+    config, _ = parse_options("flight", tmp, [])
+    a = replace(config, recording_dir=os.path.join(tmp, "vio"),
+                estimate_dir=os.path.join(tmp, "run"), device="fake", min_free_gb=min_free_gb)
     vf.STOP["sig"] = None
     t = threading.Thread(target=vf.fly, args=(a, vf.Link(fc), pwd.getpwuid(os.getuid()),
                                               [sys.executable, "-u", fake]))

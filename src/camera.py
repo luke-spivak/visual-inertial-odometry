@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from flight_config import FlightConfig
+
 W, H = 1280, 800
 
 
@@ -73,7 +75,7 @@ def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000))
     return chosen[0], 1.0
 
 
-def select_exposure(config):
+def select_exposure(config: FlightConfig):
     if config.exposure_mode == "fixed":
         print(f"  fixed-exposure: {config.shutter} us, gain {config.gain:.2f}")
         return config.shutter, config.gain

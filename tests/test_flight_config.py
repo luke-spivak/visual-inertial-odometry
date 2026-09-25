@@ -1,26 +1,31 @@
 """Configuration contracts across flight, bench capture, and diagnostics."""
-from dataclasses import asdict
+from dataclasses import FrozenInstanceError
 import json
 from pathlib import Path
 
 import pytest
 
 from cli import parse_options
-from flight_config import DEFAULT_CONFIG, load_config, save_config
+from flight_config import DEFAULT_CONFIG, FlightConfig, load_config, save_config
 
 
 def test_all_commands_share_aircraft_settings():
-    flight = parse_options("flight", "/home/pilot", [])
-    capture = parse_options("capture", "/home/pilot", ["bench", "--secs", "15", "--no-record"])
-    bridge = parse_options("bridge", "/home/pilot", ["--expect-accel"])
+    flight, flight_options = parse_options("flight", "/home/pilot", [])
+    capture, capture_options = parse_options("capture", "/home/pilot", ["bench", "--secs", "15", "--no-record"])
+    bridge, bridge_options = parse_options("bridge", "/home/pilot", ["--expect-accel"])
     config, _ = load_config(DEFAULT_CONFIG, "/home/pilot")
     for command in (flight, capture, bridge):
-        for name, value in asdict(config).items():
-            assert getattr(command, name) == value
+        assert isinstance(command, FlightConfig)
+        assert command == config
+    assert vars(flight_options) == {"config": str(DEFAULT_CONFIG)}
+    for options in (flight_options, capture_options, bridge_options):
+        assert not hasattr(options, "baud")
+    with pytest.raises(FrozenInstanceError):
+        flight.baud = 9600
     assert flight.upside_down is True
     assert flight.exposure_mode == "sweep"
     assert flight.estimator_binary == str(Path("/home/pilot/vio_live/vio_live").resolve())
-    assert capture.secs == 15 and capture.no_record
+    assert capture_options.secs == 15 and capture_options.no_record
 
 
 def test_relative_paths_and_snapshot_are_reusable(tmp_path):
@@ -29,14 +34,16 @@ def test_relative_paths_and_snapshot_are_reusable(tmp_path):
                 shutter=500, tilt_deg=25, upside_down=False)
     path = tmp_path / "custom.json"
     path.write_text(json.dumps(data))
-    a = parse_options("flight", "/home/pilot", ["--config", str(path)])
+    a, _ = parse_options("flight", "/home/pilot", ["--config", str(path)])
     assert a.recording_dir == str(tmp_path / "recordings")
     assert a.estimator_config == str(tmp_path / "estimator.yaml")
     snapshot = tmp_path / "snapshot.json"
     save_config(a, snapshot)
     # Editing the original file must not change a child's pinned settings.
     path.write_text("{}")
-    child = parse_options("capture", "/root", ["bench", "--config", str(snapshot)])
+    child, options = parse_options("capture", "/root", ["bench", "--config", str(snapshot)])
+    assert options.out == "bench"
+    assert not hasattr(child, "out")
     assert child.shutter == 500 and child.tilt_deg == 25 and not child.upside_down
     assert child.estimator_binary == str(Path("/home/pilot/vio_live/vio_live").resolve())
 

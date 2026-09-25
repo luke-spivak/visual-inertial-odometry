@@ -232,27 +232,27 @@ class Sender:
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    a = parse_options("bridge", user.pw_dir)
+    config, options = parse_options("bridge", user.pw_dir)
 
-    if a.expect_accel:
-        print(f"Airframe level and still, camera {a.tilt_deg:g} deg nose-down -- the Pi IMU reads:")
-        ax, ay, az = expected_accel(a.tilt_deg, a.upside_down)
-        print(f"  {'upside-down' if a.upside_down else 'upright'}  "
+    if options.expect_accel:
+        print(f"Airframe level and still, camera {config.tilt_deg:g} deg nose-down -- the Pi IMU reads:")
+        ax, ay, az = expected_accel(config.tilt_deg, config.upside_down)
+        print(f"  {'upside-down' if config.upside_down else 'upright'}  "
               f"x {ax:+.2f}  y {ay:+.2f}  z {az:+.2f} m/s^2")
         return 0
 
     mav = None
-    if not a.dry_run:
+    if not options.dry_run:
         os.environ.setdefault("MAVLINK20", "1")      # reset_counter is a MAVLink 2 extension
         from pymavlink import mavutil
-        mav = mavutil.mavlink_connection(a.device, baud=a.baud,
+        mav = mavutil.mavlink_connection(config.device, baud=config.baud,
                                          source_system=1, source_component=197)
-        print(f"[mavlink_bridge] MAVLink out: {a.device} @ {a.baud}", flush=True)
-    print(f"[mavlink_bridge] camera {a.tilt_deg:g} deg nose-down, "
-          f"{'upside-down' if a.upside_down else 'upright'}", flush=True)
+        print(f"[mavlink_bridge] MAVLink out: {config.device} @ {config.baud}", flush=True)
+    print(f"[mavlink_bridge] camera {config.tilt_deg:g} deg nose-down, "
+          f"{'upside-down' if config.upside_down else 'upright'}", flush=True)
 
-    sender = Sender(mav, a.tilt_deg, a.upside_down, a.send_velocity, a.max_lag)
-    for line in follow(a.est):
+    sender = Sender(mav, config.tilt_deg, config.upside_down, config.send_velocity, config.max_lag)
+    for line in follow(options.est):
         sender.line(line)
         msg = sender.report()
         if msg:

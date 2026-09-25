@@ -2,7 +2,8 @@
 import json
 from pathlib import Path
 import subprocess
-from types import SimpleNamespace
+from dataclasses import replace
+from flight_config import DEFAULT_CONFIG, load_config
 
 import pytest
 
@@ -14,7 +15,8 @@ def test_fixed_exposure_never_starts_a_probe(monkeypatch):
     def unexpected(*args, **kwargs):
         pytest.fail("fixed exposure must not start the camera")
     monkeypatch.setattr(camera.subprocess, "run", unexpected)
-    assert camera.select_exposure(SimpleNamespace(exposure_mode="fixed", shutter=500, gain=2)) == (500, 2)
+    config, _ = load_config(DEFAULT_CONFIG, "/home/pilot")
+    assert camera.select_exposure(replace(config, exposure_mode="fixed", shutter=500, gain=2)) == (500, 2)
 
 
 def test_auto_exposure_caps_shutter_and_cleans_up(monkeypatch):

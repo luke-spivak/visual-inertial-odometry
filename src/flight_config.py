@@ -1,5 +1,5 @@
 """Load and validate aircraft settings shared by flight, capture, and diagnostics."""
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 import json
 import math
 from pathlib import Path
@@ -76,15 +76,14 @@ def load_config(path, user_home):
         raise ValueError(f"configuration keys: missing {sorted(expected - set(data))}, "
                          f"unknown {sorted(set(data) - expected)}")
     config = FlightConfig(**data)
-    resolved = asdict(config)
+    resolved = {}
     for name in ("recording_dir", "estimate_dir", "estimator_binary", "estimator_config"):
-        resolved[name] = resolve_path(resolved[name], user_home, path.parent)
-    return FlightConfig(**resolved), str(path)
+        resolved[name] = resolve_path(getattr(config, name), user_home, path.parent)
+    return replace(config, **resolved), str(path)
 
 
-def save_config(options, path):
+def save_config(config: FlightConfig, path):
     """Record resolved aircraft settings without transient command-line options."""
-    config = FlightConfig(**{f.name: getattr(options, f.name) for f in fields(FlightConfig)})
     with open(path, "w") as stream:
         json.dump(asdict(config), stream, indent=2)
         stream.write("\n")

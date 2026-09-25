@@ -1,11 +1,11 @@
 """Small operational CLIs; persistent aircraft settings live in flight.json."""
 import argparse
-from dataclasses import asdict
 
-from flight_config import DEFAULT_CONFIG, load_config
+from flight_config import DEFAULT_CONFIG, FlightConfig, load_config
 
 
-def parse_options(command, user_home, argv=None):
+def parse_options(command, user_home, argv=None) -> tuple[FlightConfig, argparse.Namespace]:
+    """Return validated aircraft settings separately from transient CLI options."""
     descriptions = {
         "flight": "Supervise onboard VIO using the aircraft configuration.",
         "capture": "Capture one bench VIO session using the aircraft configuration.",
@@ -33,5 +33,5 @@ def parse_options(command, user_home, argv=None):
         config, path = load_config(options.config, user_home)
     except (OSError, ValueError) as exc:
         parser.error(f"invalid flight configuration: {exc}")
-    del options.config
-    return argparse.Namespace(**asdict(config), **vars(options), flight_config=path)
+    options.config = path
+    return config, options

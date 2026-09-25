@@ -65,28 +65,28 @@ def imu_setup(watermark, out):
 
 def main():
     user = pwd.getpwnam(os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name)
-    a = parse_options("capture", user.pw_dir)
+    config, options = parse_options("capture", user.pw_dir)
     if os.geteuid() != 0:
         fail("needs root for the IMU: run with sudo")
-    for f in (a.estimator_binary, a.estimator_config):
+    for f in (config.estimator_binary, config.estimator_config):
         if not os.path.exists(f):
             fail(f"{f} not found -- run tools/deploy/build_vio.sh on the Mac")
-    out = os.path.abspath(a.out)
-    est = os.path.abspath(a.est) if a.est else out + ".est.txt"
+    out = os.path.abspath(options.out)
+    est = os.path.abspath(options.est) if options.est else out + ".est.txt"
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    save_config(a, out + ".flight.json")
+    save_config(config, out + ".flight.json")
     # Under systemd (flight_supervisor.py) a stop is SIGTERM to this process alone, with no
     # tty to hand SIGINT to rpicam-raw and vio_live as well. Take it as a Ctrl-C:
     # the finally block stops the camera, and vio_live ends when its FIFOs close.
     signal.signal(signal.SIGTERM, _sigterm)
 
-    print(f"=== exposure: {a.exposure_mode}, point the camera at the scene ===")
+    print(f"=== exposure: {config.exposure_mode}, point the camera at the scene ===")
     try:
-        sh, g = select_exposure(a)
+        sh, g = select_exposure(config)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         fail(f"camera exposure: {exc}")
     with open(out + ".exposure.json", "w") as f:
-        json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)
+        json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": config.max_shutter}, f)
 
     devs = {}
     fdir = tempfile.mkdtemp(prefix="vio_live_")
@@ -95,29 +95,29 @@ def main():
     vio = cam = None
     interrupted = False
     try:
-        if not a.no_record:
+        if not options.no_record:
             try:
                 # Preserve calibration/config used to interpret feature coordinates.
                 with open(out + ".recording.json", "w") as manifest:
                     json.dump({"version": 1, "width": W, "height": H,
                                "argv": sys.argv, "clock": "CLOCK_MONOTONIC",
-                               "config_files": {name: open(os.path.join(os.path.dirname(a.estimator_config), name)).read()
-                                                for name in os.listdir(os.path.dirname(a.estimator_config))
+                               "config_files": {name: open(os.path.join(os.path.dirname(config.estimator_config), name)).read()
+                                                for name in os.listdir(os.path.dirname(config.estimator_config))
                                                 if name.endswith(".yaml")}}, manifest, indent=2)
             except OSError as e:
                 print(f"Could not save recording manifest: {e}")
-        devs = imu_setup(a.watermark, out)
-        vio = subprocess.Popen([a.estimator_binary, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
-                                "--config", a.estimator_config, "--out", est, "--verbosity", a.verbosity,
-                                "--imu-lpf", str(a.imu_lpf)]
-                               + ([] if a.no_record else ["--record", out]))
+        devs = imu_setup(config.watermark, out)
+        vio = subprocess.Popen([config.estimator_binary, "--imu", out + ".imu.cfg", "--frames", frames, "--meta", meta,
+                                "--config", config.estimator_config, "--out", est, "--verbosity", config.verbosity,
+                                "--imu-lpf", str(config.imu_lpf)]
+                               + ([] if options.no_record else ["--record", out]))
         time.sleep(1.5)
         if vio.poll() is not None:
             fail(f"vio_live exited {vio.returncode} during startup (config?)")
-        print(f"=== camera: {W}x{H} at {a.fps:g} fps, {sh} us, gain {g:.2f}. "
+        print(f"=== camera: {W}x{H} at {config.fps:g} fps, {sh} us, gain {g:.2f}. "
               f"Keep the rig STILL until it says INITIALIZED. Ctrl-C to stop. ===", flush=True)
-        cam = subprocess.Popen(camera_command(frames, fps=a.fps, shutter=sh, gain=f"{g:.2f}",
-                                               duration_ms=a.secs * 1000, metadata=meta, flush=True),
+        cam = subprocess.Popen(camera_command(frames, fps=config.fps, shutter=sh, gain=f"{g:.2f}",
+                                               duration_ms=options.secs * 1000, metadata=meta, flush=True),
                                stdout=subprocess.DEVNULL, stderr=open(out + ".cam.log", "w"))
         while cam.poll() is None and vio.poll() is None:
             time.sleep(0.2)
@@ -144,7 +144,7 @@ def main():
                 p.wait(timeout=grace)
             except (subprocess.TimeoutExpired, KeyboardInterrupt):
                 p.kill(); p.wait()
-        if not a.no_record and vio is not None and vio.returncode == 0:
+        if not options.no_record and vio is not None and vio.returncode == 0:
             try:
                 with open(out + ".complete.json", "w") as marker:
                     json.dump({"version": 1, "vio_exit": vio.returncode,
@@ -159,7 +159,7 @@ def main():
     if cam is not None and cam.returncode not in (0, None) and not interrupted:
         print(f"rpicam-raw exited {cam.returncode}:")
         print("".join(open(out + ".cam.log").readlines()[-5:]))
-    print(f"\nfiles: {est}" + ("" if a.no_record else f", recording {out}.{{y16,meta.json,imu.json,imu_*.bin}}"))
+    print(f"\nfiles: {est}" + ("" if options.no_record else f", recording {out}.{{y16,meta.json,imu.json,imu_*.bin}}"))
 
 
 if __name__ == "__main__":
