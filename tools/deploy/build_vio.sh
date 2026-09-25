@@ -64,7 +64,7 @@ echo "  bundle: vio_live + $(ls "$REPO/$B/bundle/lib" | wc -l | tr -d ' ') libs 
 
 ssh "$PI" 'mkdir -p ~/src/config'
 rsync -a --delete "$REPO/$B/bundle/" "$PI:vio_live/"
-scp -q "$REPO/src/capture_session.py" "$REPO/src/imu_device.py" "$REPO/src/mavlink_bridge.py" \
+scp -q "$REPO/src/camera.py" "$REPO/src/capture_session.py" "$REPO/src/imu_device.py" "$REPO/src/mavlink_bridge.py" \
     "$REPO/src/flight_config.py" "$REPO/src/cli.py" "$REPO/src/flight_supervisor.py" "$REPO/src/vio@.service" "$PI:src/"
 
 scp -q "$REPO/src/config/flight.json" "$PI:src/config/"

@@ -36,6 +36,10 @@ def status_of(line):
         return SEV_ERROR, "VIO FAIL:" + line.split("FAIL:", 1)[1].rstrip()
     if "auto-exposure:" in line and "->" in line:
         return SEV_INFO, "VIO exposure " + line.rsplit("->", 1)[1].strip()
+    if line.startswith("  fixed-exposure:"):
+        return SEV_INFO, "VIO exposure " + line.split(":", 1)[1].strip()
+    if line.startswith("  exposure sweep selected "):
+        return SEV_INFO, "VIO exposure " + line.split("selected ", 1)[1].strip()
     if "*** INITIALIZED" in line:
         return SEV_INFO, "VIO initialized"
     if "--- moving:" in line:

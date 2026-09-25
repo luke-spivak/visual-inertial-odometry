@@ -12,6 +12,7 @@ for a single bench capture. Each command supports `--help`. Tests live in
 | `openvins_runner/sensor_runner.cpp` | Read IIO IMU samples and camera FIFOs, schedule OpenVINS updates, and write estimates and recordings. |
 | `cli.py` | Expose the small flight, bench, and diagnostic command interfaces. |
 | `flight_config.py` | Load, validate, and snapshot aircraft settings. |
+| `camera.py` | Shared camera command construction and exposure selection. |
 | `imu_device.py` | Shared IIO discovery, setup, layout parsing, and teardown. |
 | `config/` | Flight settings (`flight.json`), OpenVINS settings, and camera/IMU calibration. |
 
@@ -82,7 +83,9 @@ CLI overrides for exposure, mounting, serial settings, or estimator paths.
 The supervisor privately supplies the capture estimate path on tmpfs.
 
 `exposure_mode` is `sweep`, `auto`, or `fixed`. `max_shutter` caps auto exposure;
-`shutter` (microseconds) and `gain` apply in fixed mode. `imu_lpf` is in Hz,
+`shutter` (microseconds) and `gain` apply in fixed mode, which skips probing.
+Auto/sweep probes use temporary directories and stop on camera errors, timeouts,
+or invalid output rather than reusing a previous result. `imu_lpf` is in Hz,
 `tilt_deg` in degrees below horizontal, and `max_lag` in seconds (zero disables
 stale-pose rejection for offline diagnostics). `min_free_gb` uses decimal GB.
 `send_velocity` controls velocity messages alongside position. `verbosity`

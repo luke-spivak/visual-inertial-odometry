@@ -5,13 +5,12 @@ Owns camera/estimator processes, recording, and orderly shutdown.
 """
 from cli import parse_options
 from flight_config import save_config
+from camera import W, H, camera_command, select_exposure
 import json, os, pwd, shutil, signal, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import imu_device  # noqa: E402
-
-W, H = 1280, 800
 
 
 def fail(msg):
@@ -20,57 +19,6 @@ def fail(msg):
 
 def _sigterm(signum, frame):
     raise KeyboardInterrupt
-
-
-def ae_probe(max_shutter, fixed_shutter=None, fixed_gain=None):
-    """Same probe as kalibr_capture_imucam.sh: let AE settle, keep its exposure
-    product, cap the shutter and move the rest into gain."""
-    subprocess.run(["rpicam-raw", "-n", "--mode", f"{W}:{H}:8", "--width", str(W), "--height", str(H),
-                    "-t", "2500", "--framerate", "5", "-o", "/tmp/ae.y16",
-                    "--metadata", "/tmp/ae.json", "--metadata-format", "json"], capture_output=True)
-    last = json.load(open("/tmp/ae.json"))[-1]
-    os.remove("/tmp/ae.y16"); os.remove("/tmp/ae.json")
-    P = last["ExposureTime"] * last["AnalogueGain"]
-    if fixed_shutter is not None:
-        sh = int(fixed_shutter)
-        g = float(fixed_gain if fixed_gain is not None else 1.0)
-    else:
-        sh = int(min(P, max_shutter)); g = max(1.0, P / sh)
-    print(f"  auto-exposure: {last['ExposureTime']} us x gain {last['AnalogueGain']:.2f} at ~{last.get('Lux', 0):.0f} lux"
-          f" -> fixed {sh} us, gain {g:.2f}")
-    if g > 16:
-        fail(f"needs gain {g:.0f} at {sh} us -- too dark. Add light and rerun.")
-    return sh, g
-
-
-def exposure_sweep(candidates=(20, 30, 50, 75, 100, 200, 500, 1000, 2000, 4000)):
-    """Choose the brightest fixed exposure below the clipping limit."""
-    results = []
-    for shutter in candidates:
-        path = f"/tmp/exposure-sweep-{shutter}.y16"
-        subprocess.run(["rpicam-raw", "-n", "--mode", f"{W}:{H}:8", "--width", str(W), "--height", str(H),
-                        "--framerate", "20", "--shutter", str(shutter), "--gain", "1",
-                        "--frames", "30", "-o", path], capture_output=True)
-        try:
-            data = open(path, "rb").read()
-            pixels = data[1::2]
-            if not pixels:
-                continue
-            clipped = sum(v >= 250 for v in pixels) / len(pixels)
-            mean = sum(pixels) / len(pixels)
-            results.append((shutter, clipped, mean))
-        finally:
-            try: os.remove(path)
-            except OSError: pass
-    if not results:
-        fail("exposure sweep produced no frames")
-    # Maximize usable brightness without saturating more than 1% of pixels.
-    usable = [r for r in results if r[1] <= 0.01 and r[2] >= 15]
-    chosen = max(usable, key=lambda r: r[2]) if usable else min(results, key=lambda r: r[1])
-    print("  exposure sweep: " + ", ".join(f"{s} us={clip*100:.2f}% clip, mean={mean:.1f}"
-                                           for s, clip, mean in results))
-    print(f"  exposure sweep selected {chosen[0]} us, gain 1.00 (brightest under clipping limit)")
-    return chosen[0], 1.0
 
 
 def imu_setup(watermark, out):
@@ -133,8 +81,10 @@ def main():
     signal.signal(signal.SIGTERM, _sigterm)
 
     print(f"=== exposure: {a.exposure_mode}, point the camera at the scene ===")
-    sh, g = (exposure_sweep() if a.exposure_mode == "sweep" else
-             ae_probe(a.max_shutter, a.shutter if a.exposure_mode == "fixed" else None, a.gain))
+    try:
+        sh, g = select_exposure(a)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        fail(f"camera exposure: {exc}")
     with open(out + ".exposure.json", "w") as f:
         json.dump({"shutter_us": sh, "gain": round(g, 2), "max_shutter_us": a.max_shutter}, f)
 
@@ -166,10 +116,8 @@ def main():
             fail(f"vio_live exited {vio.returncode} during startup (config?)")
         print(f"=== camera: {W}x{H} at {a.fps:g} fps, {sh} us, gain {g:.2f}. "
               f"Keep the rig STILL until it says INITIALIZED. Ctrl-C to stop. ===", flush=True)
-        cam = subprocess.Popen(["rpicam-raw", "-n", "--mode", f"{W}:{H}:8", "--width", str(W), "--height", str(H),
-                                "-t", str(a.secs * 1000), "--framerate", str(a.fps),
-                                "--shutter", str(sh), "--gain", f"{g:.2f}", "--flush",
-                                "-o", frames, "--metadata", meta, "--metadata-format", "json"],
+        cam = subprocess.Popen(camera_command(frames, fps=a.fps, shutter=sh, gain=f"{g:.2f}",
+                                               duration_ms=a.secs * 1000, metadata=meta, flush=True),
                                stdout=subprocess.DEVNULL, stderr=open(out + ".cam.log", "w"))
         while cam.poll() is None and vio.poll() is None:
             time.sleep(0.2)
