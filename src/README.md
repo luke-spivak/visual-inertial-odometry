@@ -122,3 +122,10 @@ sidecars for offline replay. The live estimator filters IMU samples, while the
 recording remains unfiltered; replay must apply the same filtering for comparison.
 Historical measurements and debugging investigations remain in the
 [development log](../docs/development-log.md).
+
+## C++ migration
+
+The [migration plan](../docs/cpp-migration.md) tracks the staged replacement of
+the Python flight runtime. `estimate.*` and `frames.*` are the tested native
+foundation; `src/CMakeLists.txt` builds them independently. They are not yet wired
+into the active onboard service.
