@@ -1,17 +1,14 @@
-# vio@.service -- src/flight_supervisor.py from boot, as root, for the user named
-# after the @ (whose ~/src, ~/vio_live and ~/vio it uses). Install and use:
-# see flight_supervisor.py.
+# Native runtime; install the release and its configuration before this unit.
 [Unit]
-Description=VIO flight session for %i (src/flight_supervisor.py)
+Description=Native VIO application for %i
 
 [Service]
 Environment=SUDO_USER=%i
-ExecStart=/usr/bin/python3 -u /home/%i/src/flight_supervisor.py --config /home/%i/src/config/flight.json
-# SIGTERM to flight_supervisor.py alone: it passes it to capture_session.py, which stops the
-# camera and lets vio_live close the recording. Anything left is killed only if
-# that overruns TimeoutStopSec (flight_supervisor.py itself gives it 80 s).
+Group=%i
+UMask=0002
+ExecStart=/home/%i/vio-native/vio_flight /home/%i/vio-native/config/flight.json
 KillMode=mixed
-TimeoutStopSec=100
+TimeoutStopSec=30
 Restart=on-failure
 RestartSec=5
 

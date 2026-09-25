@@ -1,118 +1,95 @@
 # Setup and deployment
 
-Run repository commands from its root. This project has three environments:
-a desktop for analysis/builds, the Raspberry Pi for live VIO, and a Linux
-ROS 2 environment for simulation/replay.
+The Pi runtime is one C++ application, `vio_flight`. Python tools are used for
+calibration, offline analysis, simulation, and test orchestration. See the
+[runtime guide](../src/README.md) for ownership and data flow.
 
-## Runtime and configuration
+## Build and test
 
-The live path is `src/flight_supervisor.py` → `src/capture_session.py` →
-`src/openvins_runner/sensor_runner.cpp`, with `src/mavlink_bridge.py` sending the resulting
-poses to ArduPilot. `src/imu_device.py` also provides the sensor setup used at runtime.
-See [onboard runtime responsibilities](../src/README.md) for the process layout,
-CLI organization, and ROS tradeoff.
-Hardware runs without ROS; the simulation bridge lives in `sim/ros2/vio_bridge/`.
+Core tests need CMake, a C++17 compiler, Eigen, and nlohmann-json:
 
-Simulation configuration is in `sim/config/`; hardware configuration is in
-`src/config/`. The latter is specific to the calibrated sensor assembly.
-Mission plans are in `src/missions/`. Historical flight-controller parameters
-are in `results/config-snapshots/`, not a current recommended configuration.
+```sh
+cmake -S src -B build/native-core
+cmake --build build/native-core
+ctest --test-dir build/native-core --output-on-failure
+```
 
-Large datasets and local environments stay outside the tracked source tree.
-Historical experiment records may refer to paths used before the directory
-reorganization; commands in this guide use the current layout.
+The complete executable additionally needs libcamera >= 0.4, OpenCV, Ceres,
+Boost, and the ROS-free OpenVINS library built with `ENABLE_ARUCO_TAGS=OFF`:
 
-## Desktop tests and analysis
+```sh
+cmake -S src -B build/native -G Ninja -DVIO_BUILD_FLIGHT_APP=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOV_SRC=/absolute/path/to/open_vins \
+  -DOV_LIB=/absolute/path/to/libov_msckf_lib.so
+cmake --build build/native -j1
+ctest --test-dir build/native --output-on-failure
+```
+
+Build against the Pi's installed libcamera headers and libraries. The pinned
+OpenVINS revision is `69488123ed9362dd44b6f28e7f4680abbff1442b`.
+`tools/deploy/build_vio.sh` builds its dependency bundle in Docker; it no longer
+replaces files on the Pi. `prepare_native_build.sh` installs native build
+packages on the existing Pi image. `build_native_on_pi.sh` expects a staged tree
+containing `src`, `tests`, the replay fixture under `results`, OpenVINS source in
+`deps/open_vins`, generated MAVLink headers in `deps/mavlink-headers`, and the
+preserved OpenVINS library/dependencies in `candidate/lib`. It builds, runs all
+eight tests, and places the executable in `candidate`.
+
+## Raspberry Pi deployment
+
+The target uses an OV9281 camera and ISM330DHCX IIO sensors. Driver setup and the
+existing timestamp patch are documented in the [development log](development-log.md).
+The native runtime does not require Python, pymavlink, rpicam subprocesses, or ROS.
+
+The service template expects this release layout:
+
+```text
+~/vio-native/
+  vio_flight
+  lib/                       OpenVINS and bundled dependencies
+  config/flight.json         aircraft runtime settings
+  config/*.yaml              matching calibration and estimator settings
+```
+
+Set `estimator_config` in the release JSON to its matching YAML path. Preserve
+the actual aircraft calibration instead of overwriting it with an example.
+Before replacing an installed service, preserve its unit and deployment as a
+rollback, stop it, verify the release's `ldd` output, and complete the hardware
+checks. Never run two UART publishers. The service runs with root access for IIO;
+`SUDO_USER` selects the recording user's home and `Group` permits group access.
+
+After validation, install the unit on the Pi:
+
+```sh
+sudo install -m 644 src/vio@.service /etc/systemd/system/vio@.service
+sudo systemctl daemon-reload
+sudo systemctl enable vio@"$USER"
+sudo systemctl start vio@"$USER"
+journalctl -u vio@"$USER" -f
+```
+
+Updating this repository does not change the installed Pi service. At the latest
+[bench validation](../results/native-validation-2026-09-25/README.md), the native
+application passed stationary/movement checks but the old deployment was retained
+and stopped. Controller reboot recovery and navigation warnings remain open;
+boot-service cutover and outdoor flight validation are not yet complete.
+
+## Offline tools
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r tools/requirements-test.txt
 python -m pytest -q
+sudo python3 tools/sensors/imu_log.py --check
 ```
 
-The test dependencies cover coordinate transforms, session management, and
-tracking-video rendering. Other analysis tools can additionally need
-Matplotlib, PyYAML, pymavlink, or ROS; their imports and usage comments describe
-their inputs. `tools/tracking/render_tracking.py` uses FFmpeg supplied by imageio-ffmpeg.
-
-The native recording tests include feature serialization, slow storage, bounded shutdown,
-and (on Linux) `/dev/full` errors:
-
-```sh
-cmake -S src -B build/native-core
-cmake --build build/native-core
-ctest --test-dir build/native-core -R recording --output-on-failure
-```
-
-Score a retained handheld estimate without hardware or ROS:
-
-```sh
-python tools/evaluation/vio_closure.py results/vio_walk3_2026-09-10-live-estimate.txt
-```
-
-## Raspberry Pi
-
-The existing target is a Pi 5 running Debian 13-based Raspberry Pi OS, with
-rpicam-raw, the OV9281 camera, and the ISM330DHCX on SPI. It requires the IIO
-driver/overlay and monotonic timestamp setup described in the
-[development log](development-log.md). Driver build scripts, device-tree
-sources, and the timestamp patch live in `tools/sensors/`. The runtime also requires
-NumPy and pymavlink in the Pi's system Python environment.
-
-The heavy C++ build uses Docker and SSH access to the Pi:
-
-```sh
-bash tools/buildenv/buildenv.sh build
-PI=viopi bash tools/buildenv/buildenv.sh verify
-PI=viopi bash tools/deploy/build_vio.sh
-```
-
-`verify` runs a probe on the Pi. `build_vio.sh` builds **and deploys**: it pins
-OpenVINS to `69488123ed9362dd44b6f28e7f4680abbff1442b`, builds for Cortex-A76,
-copies the executable/libraries/configuration to `~/vio_live/`, and copies
-the runtime Python files and service unit to `~/src/` on the Pi. Deploy with
-the aircraft disarmed and the service stopped. The script does not install
-or restart the systemd service.
-
-### Migrating the existing Pi service
-
-Earlier deployments ran from `~/harness/` or invoked `~/src/vio_flight.py`.
-The service now invokes `~/src/flight_supervisor.py`. Deploy all runtime Python
-files together, including `cli.py`, `flight_config.py`, and `config/flight.json`, before installing
-the updated unit. The service now selects that JSON with `--config`; remove any
-old exposure/mount/link flags from local service overrides.
-After deploying, install the new unit **on the Pi**:
-
-```sh
-sudo cp ~/src/vio@.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable vio@$USER
-```
-
-Start it when ready for a hardware check with `sudo systemctl start vio@$USER`;
-inspect logs with `journalctl -u vio@$USER -f`.
-Updating this repository alone does not migrate an already installed service.
-
-For manual live capture on the configured Pi:
-
-```sh
-sudo python3 ~/src/capture_session.py ~/vio/bench --secs 30
-```
-
-Aircraft settings live in `src/config/flight.json`; the full deployment copies
-that file to `~/src/config/flight.json` and replaces the deployed copy. Keep the
-repository configuration current before deploying. See the [runtime guide](../src/README.md#flight-configuration-and-bench-commands)
-for settings, alternative bench configurations, and diagnostic commands.
-Incremental tracking deployment updates code but preserves the deployed JSON.
-
-To use calibration/diagnostic tools on the Pi, clone this repository there
-or copy `tools/` and `src/` as siblings. The standalone recorder is `tools/sensors/imu_log.py`; it imports the shared
-`src/imu_device.py`. Calibration and sensor-check scripts use that recorder.
-The incremental `tools/deploy/deploy_tracking.sh` remains specific to the existing
-`luke` account and requires a complete deployment with the new Python names
-and updated service unit first; use `build_vio.sh`
-for the complete deployment.
+The standalone IMU logger imports `tools/sensors/imu_device.py`; it does not
+import flight runtime code. Python tests cover analysis and simulation transforms;
+native runtime tests are in CTest. Other tools may need ROS, pymavlink, or plotting
+packages as described in their imports. `validate_native.py` is a bounded bench
+UART tap requiring pymavlink, not an onboard runtime dependency.
 
 ## Simulation and ROS replay
 

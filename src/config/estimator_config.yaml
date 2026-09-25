@@ -218,7 +218,7 @@ min_px_dist: 15 # px; scaled up for 1280x800
 knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
 # Inherited from the SIM config, where the camera runs at 30.3 Hz and 21 means
 # OpenVINS keeps every SECOND frame -- effective tracking rate 15.2 Hz, measured,
-# not 21. On HARDWARE the camera only delivers ~19.2 fps (src/vio_live.py, default
+# not 21. On HARDWARE the camera only delivers ~19.2 fps (measured Pi capture, default
 # --fps 20), so 21 >= 19.2 and every frame is tracked -- no frame-skip happens here.
 # The sim's frame-skip finding (keeping every frame didn't help: 16.3 % vs 16.0 %,
 # and was worse at sigma_px 2: 63.3 %) does not transfer; re-measure on hardware

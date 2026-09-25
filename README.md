@@ -35,7 +35,10 @@ Onboard camera footage showing the visual features OpenVINS tracks to estimate t
 | [docs/](docs/) | Setup, hardware specifications, development history, and archived plans |
 | [results/](results/) | Recorded measurements, plots, and experiment reports |
 
-The onboard software runs without ROS; simulation uses ROS 2 and Gazebo.
+The onboard runtime is a single C++ process: direct IIO and libcamera capture →
+OpenVINS → MAVLink over UART. Python is used for offline tools and tests; simulation
+uses ROS 2 and Gazebo. The native runtime has passed Pi bench tests; the real-flight
+results above predate this runtime migration. See the [validation report](results/native-validation-2026-09-25/README.md).
 
 ## Run and test
 

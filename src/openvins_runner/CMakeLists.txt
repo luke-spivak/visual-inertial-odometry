@@ -12,7 +12,7 @@ endif ()
 set(OV_SRC "" CACHE PATH "open_vins source tree")
 set(OV_LIB "" CACHE FILEPATH "libov_msckf_lib.so built from OV_SRC")
 if (NOT EXISTS "${OV_SRC}/ov_msckf/src/core/VioManager.h" OR NOT EXISTS "${OV_LIB}")
-    message(FATAL_ERROR "set OV_SRC and OV_LIB (tools/deploy/build_vio.sh does)")
+    message(FATAL_ERROR "set OV_SRC and OV_LIB to matching OpenVINS source and library")
 endif ()
 
 find_package(Eigen3 REQUIRED)

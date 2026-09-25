@@ -1,28 +1,12 @@
 #!/usr/bin/env bash
-# build.sh -- build vio_live for viopi in the buildenv container and deploy it.
-#
-#   tools/deploy/build_vio.sh          build, bundle, copy to viopi:~/vio_live, gate
-#
-# 1. OpenVINS, ROS-free, pinned to upstream 6948812 -- the parent of the VM's
-#    local commit, which only ports ROS 2 includes and so changes nothing here.
-#    ENABLE_ARUCO_TAGS=OFF (no tags in step 7; saves the contrib dependency).
-# 2. -mcpu=cortex-a76, set explicitly: the container runs on an Apple core, so
-#    -march=native would emit instructions the Pi 5 does not have.
-# 3. Bundle: the binary, libov_msckf_lib.so, and any library it needs that
-#    the Pi does not already have -- same Debian trixie builds, so same ABI,
-#    and no apt install on the Pi.
-#    Linked --disable-new-dtags: the default RUNPATH covers only the binary's
-#    direct dependencies, so a bundled libceres could not find its bundled
-#    libglog. Old-style RPATH is inherited by every library in the process.
-#    --as-needed drops the NEEDED entries OpenVINS's link line adds for OpenCV
-#    modules it never calls.
-# 4. Gate: on the Pi, `ldd` finds every library and the binary runs to its
-#    usage message.
+# Build the pinned OpenVINS dependency and compatibility runner bundle.
+
+# Produces a local dependency bundle; does not deploy or restart the Pi.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 IMAGE="${IMAGE:-vio-build:trixie}"
-PI="${PI:-viopi}"
+PI="${PI:-viopi}" # Read-only library inventory for bundling.
 OV_SHA=69488123ed9362dd44b6f28e7f4680abbff1442b
 B=build/vio_live   # relative to the repo, which the container mounts at /work
 
@@ -62,15 +46,5 @@ mkdir -p "$REPO/$B/bundle/config"
 cp "$REPO"/src/config/*.yaml "$REPO/$B/bundle/config/"
 echo "  bundle: vio_live + $(ls "$REPO/$B/bundle/lib" | wc -l | tr -d ' ') libs ($n the Pi lacked), $(du -sh "$REPO/$B/bundle" | cut -f1)"
 
-ssh "$PI" 'mkdir -p ~/src/config'
-rsync -a --delete "$REPO/$B/bundle/" "$PI:vio_live/"
-scp -q "$REPO/src/camera.py" "$REPO/src/capture_session.py" "$REPO/src/imu_device.py" "$REPO/src/mavlink_bridge.py" \
-    "$REPO/src/flight_config.py" "$REPO/src/cli.py" "$REPO/src/flight_supervisor.py" "$REPO/src/vio@.service" "$PI:src/"
 
-scp -q "$REPO/src/config/flight.json" "$PI:src/config/"
-
-ssh "$PI" 'missing=$(ldd ~/vio_live/vio_live | grep "not found" || true)
-[ -z "$missing" ] || { echo "  FAIL: on the Pi:"; echo "$missing"; exit 1; }
-out=$(~/vio_live/vio_live 2>&1 || true)
-echo "$out" | grep -q "usage: vio_live" || { echo "  FAIL: binary did not run to its usage message:"; echo "$out" | head -5; exit 1; }
-echo "  gate: every library resolves on viopi and vio_live runs"'
+echo "Dependency bundle ready at $REPO/$B/bundle; use the native Pi build for flight deployment."

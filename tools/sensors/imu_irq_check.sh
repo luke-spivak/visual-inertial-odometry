@@ -19,7 +19,7 @@ irq() { awk '/lsm6dsx/ {s=0; for (i=2; i<=NF; i++) { if ($i ~ /^[0-9]+$/) s+=$i;
 # One-shot reads first. After bench run 1 these returned ~20 g at rest with
 # the two bytes of every word equal -- a bad SPI link or register state, which
 # no watermark will fix.
-python3 - "$HERE/../../src" <<'PY'
+python3 - "$HERE" <<'PY'
 import sys; sys.path.insert(0, sys.argv[1]); import imu_device
 d = imu_device.find_devices()["accel"]; s = float(imu_device.rd(d + "/in_accel_scale"))
 v = [int(imu_device.rd(f"{d}/in_accel_{ax}_raw")) for ax in "xyz"]

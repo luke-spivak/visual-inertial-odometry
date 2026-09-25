@@ -39,8 +39,12 @@ control and failsafes; systemd owns application startup and process restart.
    IMU, camera/metadata pairs, estimates, and feature snapshots. Slow/full storage
    and interrupted shutdown tests pass. Overflow disables recording for the rest
    of that capture, retaining an explicitly incomplete prefix while navigation continues.
-6. Switch the service and remove replaced Python runtime paths only after replay,
-   simulated-FC, and hardware gates pass. Retain a rollback deployment.
+6. **Repository cleanup complete; installed-service cutover pending.** The replaced
+   Python flight runtime and its tests have been removed. The service template
+   targets `vio_flight`; calibration/analysis Python remains under `tools/`.
+   Pi stationary and guided movement checks passed; controller reboot recovery
+   and navigation-warning diagnosis remain open. The old Pi deployment is
+   preserved as rollback and its service is stopped.
 
 Each stage is a separate reviewable commit or set of commits. This document tracks
 actual progress; the planned application is not yet a replacement for the service.
@@ -163,8 +167,8 @@ the same configuration schema, including the legacy `estimator_binary` field for
 Python compatibility; native capture does not launch that binary. It requires a
 positive freshness limit and a filter cutoff below 45% of the configured 416 Hz
 IIO rate. The old standalone `src/openvins_runner` build still produces `vio_live`
-through a compatibility entry point. Deployment scripts and `vio@.service` have
-not been switched to the native application.
+through a compatibility entry point. `vio@.service` now targets the native application; the installed Pi service has
+not yet been switched.
 
 ## Native lifecycle and remaining gates
 
@@ -242,8 +246,8 @@ The existing 7,623-estimate flight replay remains part of the MAVLink tests.
 Pi hardware gates remain: sensor timing and filter behavior at the read-back IIO
 rate, CPU/queue performance with serialized OpenVINS ownership, real libcamera
 startup/shutdown, UART buffering, FC boot detection and alignment semantics, and
-signal/error cleanup under load. The Python service remains the deployment default
-until those hardware checks and deployment cutover are complete.
+signal/error cleanup under load. The installed Python service remains preserved, but stopped, until the remaining
+checks and deployment cutover are complete. See the [Pi validation report](../results/native-validation-2026-09-25/README.md).
 
 
 ## Native camera contract
