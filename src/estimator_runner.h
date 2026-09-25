@@ -1,5 +1,6 @@
 #pragma once
 
+#include "camera_source.h"
 #include "estimate.h"
 #include "imu_device.h"
 #include <atomic>
@@ -31,8 +32,9 @@ private:
 
 struct RunnerOptions {
     std::vector<ImuDevice> devices;
+    CameraSource* camera{nullptr}; // Owned by the capture session; null selects legacy FIFOs.
     std::filesystem::path frames, metadata, estimate_log, recording_prefix;
-    double imu_lpf_hz{50}, imu_rate_hz{416};
+    double imu_lpf_hz{50}, imu_rate_hz{416}, camera_fps{20};
     std::size_t max_camera_queue{10};
     SessionGeneration generation{0};
 };

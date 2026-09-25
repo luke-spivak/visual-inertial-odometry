@@ -1,10 +1,9 @@
 #include "flight_application.h"
 #include "camera_capture.h"
 #include "mavlink_link.h"
-#include "process.h"
+#include "session_store.h"
 
 #include <cmath>
-#include <csignal>
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -12,7 +11,7 @@
 
 namespace vio {
 namespace {
-/// Use the same host clock as IIO and camera SensorTimestamp, including on replay hosts.
+/// Use the host clock shared by IIO and normalized camera timestamps.
 MonotonicTime now() {
     timespec value{};
     if (::clock_gettime(CLOCK_MONOTONIC, &value) != 0)
@@ -87,7 +86,7 @@ Recording prepare_recording(const FlightConfig& config, Exposure exposure) {
 
 /// Run acquisition while the main thread services the flight controller; unwind before returning.
 void run_capture(const FlightConfig& config, EstimatorRunner& estimator, MavlinkLink& link,
-                 const CameraPipes& pipes, Exposure exposure, SessionGeneration generation,
+                 CameraSource& camera, Exposure exposure, SessionGeneration generation,
                  HardwarePaths paths, const std::function<bool()>& pump,
                  const std::function<bool()>& stopping) {
     const auto recording = prepare_recording(config, exposure);
@@ -97,8 +96,8 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
     imu.save_metadata(prefix);
     RunnerOptions options;
     options.devices = imu.devices();
-    options.frames = pipes.frames();
-    options.metadata = pipes.metadata();
+    options.camera = &camera;
+    options.camera_fps = config.fps;
     options.imu_lpf_hz = config.imu_lpf;
     options.imu_rate_hz = options.devices.front().rate_hz;
     options.generation = generation;
@@ -108,15 +107,14 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
     }
     LatestEstimate estimates;
     std::exception_ptr capture_error;
-    int camera_exit = -1;
     bool requested_stop = false;
     {
+        camera.start(config.fps, exposure);
         CaptureWorker worker(estimator, options, estimates);
-        ChildProcess camera(camera_command(config, exposure, pipes.frames(), pipes.metadata()),
-                            prefix.string() + ".cam.log");
+
         const auto started = now();
         try {
-            while (pump() && !worker.done && !camera.poll()) {
+            while (pump() && !worker.done) {
                 if (auto estimate = estimates.load()) {
                     link.publish(*estimate, now());
                     if (now() - estimate->timestamp > std::chrono::seconds(3))
@@ -135,8 +133,11 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
         // Stop publication before stopping capture; no stale poses during cleanup.
         link.end_session();
         worker.stop = true;
-        camera.stop(SIGINT, std::chrono::seconds(2));
-        camera_exit = camera.poll().value_or(-1);
+        try {
+            camera.stop();
+        } catch (...) {
+            capture_error = std::current_exception();
+        }
         while (!worker.done) {
             // Keep heartbeats and SIGTERM responsive while acquisition unwinds.
             link.poll(now());
@@ -147,15 +148,16 @@ void run_capture(const FlightConfig& config, EstimatorRunner& estimator, Mavlink
     }
     if (capture_error)
         std::rethrow_exception(capture_error);
-    if (record && requested_stop && camera_exit == 0)
+    if (record && requested_stop)
         save(prefix.string() + ".complete.json",
-             {{"version", 1}, {"vio_exit", 0}, {"camera_exit", camera_exit}});
+             {{"version", 1}, {"vio_exit", 0}, {"camera_exit", 0}});
 }
 } // namespace
 
 void run_flight(const FlightConfig& config,
                 const std::function<std::unique_ptr<ByteStream>()>& open_stream,
                 const std::function<std::unique_ptr<EstimatorRunner>()>& make_estimator,
+                const std::function<std::unique_ptr<CameraSource>()>& make_camera,
                 const std::function<bool()>& stopping, HardwarePaths paths) {
     SessionStore store(config.runtime_dir);
     auto estimator = make_estimator();
@@ -190,13 +192,12 @@ void run_flight(const FlightConfig& config,
                 estimator = make_estimator();
             if ((estimator->camera_from_imu() - calibration).norm() > 1e-10)
                 throw std::runtime_error("calibration changed during flight application lifetime");
-            CameraPipes pipes(config.runtime_dir);
-            auto exposure = select_exposure(config, pipes.frames().parent_path(), [&] {
-                return pump() && link.controller_disarmed(now());
-            });
+            auto camera = make_camera();
+            auto exposure = select_exposure(
+                config, *camera, [&] { return pump() && link.controller_disarmed(now()); });
             if (!pump() || !link.controller_disarmed(now()))
                 continue;
-            run_capture(config, *estimator, link, pipes, exposure, {generation}, paths, pump,
+            run_capture(config, *estimator, link, *camera, exposure, {generation}, paths, pump,
                         stopping);
             backoff = 5;
         } catch (const std::exception& error) {

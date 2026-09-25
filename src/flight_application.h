@@ -13,5 +13,6 @@ struct HardwarePaths {
 /// Sensor roots and the estimator factory are replaceable for hardware-free tests.
 void run_flight(const FlightConfig&, const std::function<std::unique_ptr<ByteStream>()>&,
                 const std::function<std::unique_ptr<EstimatorRunner>()>& make_estimator,
+                const std::function<std::unique_ptr<CameraSource>()>& make_camera,
                 const std::function<bool()>& stopping, HardwarePaths paths = {});
 } // namespace vio

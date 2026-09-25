@@ -10,13 +10,10 @@
 # corrupt on the Pi. buildenv.sh asserts the match rather than trusting it.
 FROM debian:trixie
 
-# Heavy third-party C++ only: OpenCV, Ceres, Eigen, Boost -- the things that
-# take hours on four Cortex-A76 cores. Anything touching libcamera, kernel
-# headers or IIO is built on the Pi itself, because those bind to the running
-# kernel and the Pi's own libraries, so building them here buys nothing and
-# risks version skew.
+# Compile/test the native app here, including the libcamera API. Deployment builds
+# must still link against the Pi's own libcamera packages to avoid ABI/version skew.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git pkg-config ca-certificates file nlohmann-json3-dev \
+        build-essential cmake ninja-build git pkg-config ca-certificates file nlohmann-json3-dev libcamera-dev \
         libeigen3-dev \
         libboost-filesystem-dev libboost-date-time-dev \
         libboost-thread-dev libboost-system-dev \

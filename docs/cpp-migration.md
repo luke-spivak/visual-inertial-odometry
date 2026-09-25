@@ -23,13 +23,17 @@ control and failsafes; systemd owns application startup and process restart.
 3. **Implemented, hardware validation pending: native application integration.**
    `flight_main.cpp` / `flight_application.*` own startup, capture, and recovery.
    `imu_device.*` discovers/configures IIO and disables owned buffers on failure.
-   `process.*` owns the camera process group, FIFOs, application lock, and durable
-   reset-counter reservations. OpenVINS runs in-process through `estimator_runner.h`,
-   handing copied snapshots to the MAVLink loop. `rpicam-raw` remains the temporary
-   camera adapter. Linux ARM64 builds and simulated lifecycle/signal tests pass.
-4. **Next sensor-backend stage:** replace `rpicam-raw` with libcamera. Verify actual Pi pixel layout/stride, sensor
-   timestamps and timebase, exposure settling, calibration, and buffer ownership.
-   This is a separate hardware gate, not assumed equivalent from compilation.
+   `session_store.*` owns the application lock and durable reset-counter reservations. OpenVINS runs in-process through `estimator_runner.h`,
+   handing copied snapshots to the MAVLink loop. Linux ARM64 builds and simulated
+   lifecycle/signal tests pass. `run_flight()` orchestrates attempts; recording
+   preparation and capture supervision are separate functions.
+4. **Implemented, Pi validation pending: in-process libcamera capture.**
+   `libcamera_source.cpp` owns the camera, requests, DMA mappings, and shutdown.
+   The native path has no camera subprocess, FIFO, or JSON metadata parser.
+   `camera_source.h` carries owned mono8 frames with matching timestamps;
+   `camera_capture.*` validates layouts and performs fixed/auto/sweep selection.
+   Verify the actual Pi mode, stride, timestamps, exposure, calibration, and
+   buffer reuse under load before deployment; compilation does not establish equivalence.
 5. Isolate recording behind bounded queues. Inject slow/full storage and interrupted
    shutdown; record gaps explicitly and keep live estimate delivery independent.
 6. Switch the service and remove replaced Python runtime paths only after replay,
@@ -53,7 +57,8 @@ actual progress; the planned application is not yet a replacement for the servic
   Validity checks do not grant publication permission or infer session restarts.
 - The estimator worker owns OpenVINS access and publishes value snapshots. A
   communication/control loop owns UART and session policy; it does not access
-  mutable estimator state. Disk writing never holds up either path.
+  mutable estimator state. Recording isolation is the target for step 5; current
+  synchronous sensor/estimate writes can still delay capture or estimation.
 - Sensor/estimate buffers are bounded. Camera backlog can discard old frames;
   IMU overflow is an explicit integrity fault. No stale-pose retransmission as
   if it were a fresh measurement.
@@ -61,8 +66,8 @@ actual progress; the planned application is not yet a replacement for the servic
 ## Calibration direction
 
 `FrameTransform` takes camera-from-IMU rotation, matching Kalibr `T_cam_imu`.
-The checked-in OpenVINS chain uses `T_imu_cam`, its inverse. The future config
-adapter must invert that rotation exactly once. The tests include rounded
+The checked-in OpenVINS chain uses `T_imu_cam`, its inverse. OpenVINS parsing
+inverts it once; the native adapter reads that parsed camera-from-IMU rotation. The tests include rounded
 historical calibration only as a compatibility fixture; production code has no
 hardcoded aircraft calibration.
 
@@ -137,8 +142,9 @@ cmake --build build/native-core
 ctest --test-dir build/native-core --output-on-failure
 ```
 
-To build the native application inside the Linux build environment, also provide
-its existing OpenVINS source/library and enable the executable:
+To build the native application inside the Linux build environment, install
+`libcamera-dev` (libcamera >= 0.4) and `nlohmann-json3-dev`, provide the existing
+OpenVINS source/library, and enable the executable:
 
 ```sh
 cmake -S src -B build/native-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -167,22 +173,25 @@ selection policy. No Python process participates in this native path.
 
 One estimator worker feeds IMU samples and camera updates to OpenVINS, including
 initialization; its initializer is joined rather than detached. Acquisition workers
-use bounded queues (1024 IMU samples, 10 camera frames, 128 timestamps). IMU overflow
+use bounded queues (1024 IMU samples, 10 estimator camera frames, and 4 camera
+callback frames). The legacy FIFO adapter alone retains its 128-timestamp queue. IMU overflow
 fails the capture instead of silently dropping samples. The communication loop
 reads a one-slot snapshot mailbox every 5 ms; estimate files are recordings only.
 Camera calibration comes from OpenVINS's parsed IMU-to-camera rotation, with a test
 against the checked-in calibration to catch a second inversion.
 
-SIGINT/SIGTERM request ordinary cleanup. The camera receives SIGINT, with bounded
-escalation to SIGKILL; acquisition workers observe the shared stop flag and are
-joined before files, FIFOs, or IMU buffers are released. Capture failures retry with
+SIGINT/SIGTERM request ordinary cleanup. libcamera stops and finishes callbacks;
+acquisition workers observe the shared stop flag and are joined before camera
+buffers, recordings, or IMU buffers are released. Capture failures retry with
 bounded exponential backoff and require a fresh disarmed controller. An unresolved
 alignment or link failure requires process-level recovery rather than silently
 starting another session. The counter is reserved before each attempt, including
 attempts that fail during startup.
 
 The native path saves flight/exposure/IMU metadata and the existing recording file
-formats. Completion markers require successful recording shutdown and camera exit.
+formats. Completion markers require the capture to return without errors after
+requested shutdown (the compatibility `camera_exit: 0` field now means native
+camera shutdown succeeded).
 Full recording isolation is still step 5: raw frame/IMU/estimate writes remain
 synchronous, and a blocked filesystem or an OpenVINS call can delay a worker join.
 A process-level stop timeout is still needed at deployment; no thread is forcibly
@@ -193,13 +202,53 @@ Validation: macOS Release and ASan/UBSan pass the five library/lifecycle CTest
 programs. Linux ARM64 builds the actual OpenVINS adapter, `vio_flight`, and legacy
 `vio_live`; its tests additionally exercise calibration direction, worker-failure
 unwinding, real SIGINT/SIGTERM, and duplicate application exclusion using a virtual
-UART. Lifecycle tests use a fake FC, estimator, camera executable, and sysfs tree:
-normal shutdown, armed startup, disarmed restart, camera exec failure, failed IIO
-setup, stubborn children, exposure selection, and persisted reset bytes are covered.
+UART. Lifecycle tests use a fake FC, estimator, camera source, and sysfs tree:
+normal shutdown, armed startup, disarmed restart, camera start/read failure, failed
+IIO setup, exposure cancellation/selection, and persisted reset bytes are covered.
+Frame tests cover padded R8/R16 extraction, malformed frames, clock conversion,
+regressing/stale timestamps, bounded queue drops, errors, and waking blocked readers.
+The real OpenVINS runner test feeds a native frame and injects a camera failure,
+checking worker cleanup and recording pixels/timestamps/sequence together.
 The existing 7,623-estimate flight replay remains part of the MAVLink tests.
 
 Pi hardware gates remain: sensor timing and filter behavior at the read-back IIO
-rate, CPU/queue performance with serialized OpenVINS ownership, real camera FIFO
+rate, CPU/queue performance with serialized OpenVINS ownership, real libcamera
 startup/shutdown, UART buffering, FC boot detection and alignment semantics, and
 signal/error cleanup under load. The Python service remains the deployment default
-until those checks and the later camera/recording stages are complete.
+until those checks and recording isolation are complete.
+
+
+## Native camera contract
+
+- Exactly one OV9281 is accepted. Request 1280×800, 8-bit sensor readout, raw
+  output, and no image rotation; refuse changes to the calibrated size/bit depth.
+  Only uncompressed R8 or R16 is accepted. R16 must contain zero low bytes on
+  every pixel; row stride is honored. Compressed, Bayer, cropped-size, and
+  processed RGB outputs are rejected instead of guessed.
+- libcamera DMA buffers remain camera-owned. Each completed frame is mapped with
+  its plane offset, synchronized for CPU reads, copied to owned mono8 pixels,
+  and synchronized back before request reuse. Neither OpenVINS nor recording
+  retains a view into a recycled buffer. Callbacks only validate/copy/enqueue;
+  they perform no disk writes or estimator updates.
+- The four-frame callback queue drops the oldest image under load and reports
+  its drop count on stop. Recording metadata includes the hardware sequence
+  number, exposing capture/queue gaps. Backend faults reach the reader as
+  exceptions; camera stalls also stop the estimator workers.
+- `SensorTimestamp` is documented by libcamera as exposure-start nanoseconds on
+  CLOCK_BOOTTIME. A bracketed clock sample converts it to CLOCK_MONOTONIC for
+  IIO, OpenVINS, and recordings. Non-increasing, future, and stale timestamps
+  fail capture; an offset change over 1 ms (such as suspend/resume) also fails.
+  Check this contract against the deployed Pi's libcamera version and a moving
+  camera/IMU recording; do not infer alignment from matching units alone.
+- Exposure probes use the same source as flight capture. Discard startup frames
+  and require manual exposure/gain readback to settle; check frame-duration
+  readback too. Sweep examines 30 frames per candidate after settling and honors
+  `max_shutter`. Auto uses reported shutter×gain, then freezes the selected
+  manual setting. This preserves the selection policy, not byte-identical probe
+  behavior; compare it with the old path on the Pi.
+- Build deployment binaries against the Pi's installed libcamera headers and
+  libraries. The Debian container verifies the API/build, not Pi pipeline or ABI
+  compatibility. `vio_live` and the Python service remain the rollback path.
+
+Reference contracts: [libcamera sensor timestamp definition](https://github.com/raspberrypi/libcamera/blob/main/src/libcamera/control_ids_core.yaml),
+[Pi raw pipeline](https://github.com/raspberrypi/libcamera/blob/main/src/libcamera/pipeline/rpi/pisp/pisp.cpp).

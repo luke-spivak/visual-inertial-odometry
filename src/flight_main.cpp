@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
         vio::run_flight(
             config, [&] { return std::make_unique<vio::SerialPort>(config.device, config.baud); },
             [&] { return vio::make_openvins_runner(config.estimator_config, config.verbosity); },
-            [] { return stopping != 0; });
+            vio::make_libcamera_source, [] { return stopping != 0; });
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "vio_flight: " << error.what() << '\n';

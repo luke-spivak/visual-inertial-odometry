@@ -330,6 +330,28 @@ static void meta_thread(Shared& S, int fd) {
     S.meta_cv.notify_all();
 }
 
+/// Hand an owned image to the estimator; its queue drops oldest frames under load.
+static void enqueue_frame(Shared& S, cv::Mat img, int64_t ts, size_t idx, size_t max_queue) {
+    ov_core::CameraData c;
+    c.timestamp = ts * 1e-9;
+    c.sensor_ids.push_back(0);
+    c.images.push_back(img);
+    c.masks.push_back(cv::Mat::zeros(S.H, S.W, CV_8UC1));
+    S.frames_in++;
+    {
+        std::lock_guard<std::mutex> lk(S.q_mtx);
+        // Bounded queue: if the estimator falls behind, drop the OLDEST frame
+        // rather than lag without limit. Drops are counted and reported --
+        // they are what broke live tracking in the sim.
+        while (S.cam_q.size() >= max_queue) {
+            S.cam_q.pop_front();
+            S.frames_dropped++;
+        }
+        S.cam_q.push_back({std::move(c), ts, idx - 1});
+    }
+    S.q_cv.notify_one();
+}
+
 static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t max_queue) {
     const size_t npx = size_t(S.W) * S.H;
     std::vector<uint8_t> raw(npx * 2);
@@ -369,28 +391,49 @@ static void frame_thread(Shared& S, int fd, FILE* rec_fp, FILE* meta_fp, size_t 
         for (size_t i = 0; i < npx; i++)
             dst[i] = raw[2 * i + 1];
 
-        ov_core::CameraData c;
-        c.timestamp = ts * 1e-9;
-        c.sensor_ids.push_back(0);
-        c.images.push_back(img);
-        c.masks.push_back(cv::Mat::zeros(S.H, S.W, CV_8UC1));
-        S.frames_in++;
-        {
-            std::lock_guard<std::mutex> lk(S.q_mtx);
-            // Bounded queue: if the estimator falls behind, drop the OLDEST frame
-            // rather than lag without limit. Drops are counted and reported --
-            // they are what broke live tracking in the sim.
-            while (S.cam_q.size() >= max_queue) {
-                S.cam_q.pop_front();
-                S.frames_dropped++;
-            }
-            S.cam_q.push_back({std::move(c), ts, idx - 1});
-        }
-        S.q_cv.notify_one();
+        enqueue_frame(S, std::move(img), ts, idx, max_queue);
     }
     std::lock_guard<std::mutex> lk(S.q_mtx);
     S.frames_done = true;
     S.q_cv.notify_one();
+}
+
+/// Native camera frames already carry their matching exposure timestamp and own their pixels.
+static void camera_thread(Shared& S, vio::CameraSource& camera, FILE* rec_fp, FILE* meta_fp,
+                          size_t max_queue, double fps) {
+    size_t idx = 0;
+    auto last_frame = std::chrono::steady_clock::now();
+    std::vector<uint8_t> raw(vio::CameraFrame::width * vio::CameraFrame::height * 2);
+    while (!*S.stop) {
+        auto frame = camera.read(std::chrono::milliseconds(200));
+        if (!frame) {
+            if (std::chrono::steady_clock::now() - last_frame >
+                std::chrono::duration<double>(std::max(3.0, (idx ? 3.0 : 15.0) / fps)))
+                die("camera stopped producing frames");
+            continue;
+        }
+        last_frame = std::chrono::steady_clock::now();
+        if (frame->pixels.size() != size_t(S.W) * S.H)
+            die("native camera frame dimensions changed");
+        ++idx;
+        if (rec_fp) {
+            // Keep the existing replay format: mono8 in the high byte of little-endian u16.
+            for (size_t i = 0; i < frame->pixels.size(); ++i)
+                raw[2 * i + 1] = frame->pixels[i];
+            if (fwrite(raw.data(), 1, raw.size(), rec_fp) != raw.size())
+                die("camera recording write failed");
+        }
+        if (meta_fp) {
+            if (fprintf(meta_fp, "%s{\"SensorTimestamp\": %lld, \"Sequence\": %llu}",
+                        idx == 1 ? "" : ",\n", (long long)frame->timestamp_ns,
+                        (unsigned long long)frame->sequence) < 0 ||
+                fflush(meta_fp))
+                die("camera metadata write failed");
+        }
+        // OpenCV's view must not outlive the vector: clone before returning the frame.
+        cv::Mat view(S.H, S.W, CV_8UC1, frame->pixels.data());
+        enqueue_frame(S, view.clone(), frame->timestamp_ns, idx, max_queue);
+    }
 }
 
 // ---------------------------------------------------------------- estimator
@@ -610,6 +653,8 @@ void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
             die("IMU filter cutoff too high");
         S.lpf.design(options.imu_lpf_hz, options.imu_rate_hz);
     }
+    if (!std::isfinite(options.camera_fps) || options.camera_fps <= 0)
+        die("invalid camera frame rate");
     if (options.max_camera_queue == 0 || options.max_camera_queue > 100)
         die("camera queue must hold 1..100 frames");
     if (options.devices.size() != 2 || options.devices[0].kind == options.devices[1].kind)
@@ -654,13 +699,23 @@ void OpenVinsRunner::run(const RunnerOptions& options, std::atomic<bool>& stop,
         fprintf(meta_json, "[\n");
         S.features.start(options.recording_prefix.string() + ".features.jsonl");
     }
-    int mfd = files.input(options.metadata.string());
-    int ffd = files.input(options.frames.string());
+    int mfd = -1, ffd = -1;
+    if (!options.camera) {
+        mfd = files.input(options.metadata.string());
+        ffd = files.input(options.frames.string());
+    }
     Workers workers(stop);
     workers.launch([&] { imu_thread(S, devs); });
     workers.launch([&] { update_thread(S, out); });
-    workers.launch([&] { meta_thread(S, mfd); });
-    workers.launch([&] { frame_thread(S, ffd, y16, meta_json, options.max_camera_queue); });
+    if (options.camera) {
+        workers.launch([&] {
+            camera_thread(S, *options.camera, y16, meta_json, options.max_camera_queue,
+                          options.camera_fps);
+        });
+    } else {
+        workers.launch([&] { meta_thread(S, mfd); });
+        workers.launch([&] { frame_thread(S, ffd, y16, meta_json, options.max_camera_queue); });
+    }
     const auto start = now_ns();
     bool imu_stalled = false;
     while (!stop) {
