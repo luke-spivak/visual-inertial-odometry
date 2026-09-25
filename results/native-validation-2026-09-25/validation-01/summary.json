@@ -1,0 +1,23 @@
+{
+  "error": null,
+  "exit_code": 0,
+  "counts": {
+    "native:HEARTBEAT": 90,
+    "fc:HEARTBEAT": 90,
+    "fc:STATUSTEXT": 6,
+    "fc:TIMESYNC": 9,
+    "native:VISION_POSITION_ESTIMATE": 1177,
+    "native:VISION_SPEED_ESTIMATE": 1177,
+    "native:COMMAND_LONG": 1,
+    "fc:COMMAND_ACK": 1,
+    "fc:PARAM_VALUE": 2
+  },
+  "alignment_accepted": true,
+  "reset_counters": [
+    1
+  ],
+  "poses": 1177,
+  "lag_p95_ms": 49.302107,
+  "lag_max_ms": 626.145257,
+  "passed": true
+}

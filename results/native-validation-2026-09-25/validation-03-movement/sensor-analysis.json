@@ -1,0 +1,86 @@
+{
+  "camera": {
+    "frames": 2846,
+    "hz": 19.200374650937864,
+    "sequence_gaps": 0
+  },
+  ".imu_accel": {
+    "samples": 65403,
+    "hz": 439.56538077003654,
+    "max_gap_ms": 2.301806,
+    "regressions": 0
+  },
+  ".imu_gyro": {
+    "samples": 65394,
+    "hz": 439.56511830032144,
+    "max_gap_ms": 2.301786,
+    "regressions": 0
+  },
+  "motion": {
+    "position_range_m": {
+      "x": 0.352393239736557,
+      "y": 0.16290461644530296,
+      "z": 0.09421845013275743
+    },
+    "last_10s_position_range_m": {
+      "x": 3.808736801147461e-05,
+      "y": 2.256035804748535e-05,
+      "z": 1.4334218576550484e-06
+    },
+    "last_10s_max_speed_mps": 0.00454404825475914,
+    "fc_status": [
+      "VisOdom: yaw shifted 0 to 165 deg",
+      "PreArm: RC not found",
+      "PreArm: Battery 1 below minimum arming voltage",
+      "GPS Glitch or Compass error",
+      "PreArm: RC not found",
+      "PreArm: Battery 1 below minimum arming voltage",
+      "Glitch cleared",
+      "PreArm: RC not found",
+      "PreArm: Battery 1 below minimum arming voltage",
+      "GPS Glitch or Compass error",
+      "PreArm: RC not found",
+      "PreArm: Battery 1 below minimum arming voltage",
+      "Glitch cleared",
+      "GPS Glitch or Compass error",
+      "PreArm: RC not found",
+      "PreArm: Battery 1 below minimum arming voltage",
+      "Glitch cleared"
+    ]
+  },
+  "recording_status": [
+    {
+      "version": 1,
+      "writer_drained": true,
+      "reason": "none",
+      "streams": {
+        "accel": {
+          "submitted": 8174,
+          "written": 8174,
+          "rejected": 0
+        },
+        "gyro": {
+          "submitted": 8174,
+          "written": 8174,
+          "rejected": 0
+        },
+        "camera": {
+          "submitted": 2846,
+          "written": 2846,
+          "rejected": 0
+        },
+        "estimate": {
+          "submitted": 2817,
+          "written": 2817,
+          "rejected": 0
+        },
+        "features": {
+          "submitted": 2845,
+          "written": 2845,
+          "rejected": 0
+        }
+      }
+    }
+  ],
+  "complete_markers": 1
+}

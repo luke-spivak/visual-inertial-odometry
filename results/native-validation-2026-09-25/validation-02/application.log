@@ -1,0 +1,137 @@
+Setting printing level to: INFO
+[0:33:20.781434667] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:20.789719028] [5459]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:20.819146619] [5459]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:20.820225403] [5459]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:20.820250958] [5459]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:20.820372977] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:20.820434663] [5459]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:23.453442334] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:23.461657066] [5462]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:23.462966277] [5462]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:23.463812059] [5462]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:23.463821189] [5462]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:23.463912930] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:23.463960986] [5462]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:26.047526965] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:26.057724282] [5465]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:26.059335958] [5465]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:26.060377056] [5465]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:26.060394001] [5465]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:26.060498353] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:26.060555779] [5465]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:28.696846751] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:28.707080808] [5468]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:28.708694762] [5468]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:28.709730916] [5468]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:28.709741675] [5468]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:28.709846213] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:28.709904084] [5468]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:31.346140047] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:31.356341382] [5471]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:31.357943428] [5471]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:31.358986453] [5471]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:31.358998008] [5471]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:31.359111898] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:31.359171120] [5471]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:33.993545640] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:34.001748742] [5474]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:34.003052972] [5474]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:34.003895624] [5474]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:34.003904958] [5474]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:34.003996440] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:34.004063607] [5474]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:36.585801708] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:36.594008292] [5477]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:36.595324262] [5477]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:36.596182378] [5477]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:36.596197656] [5477]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:36.596288731] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:36.596338213] [5477]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:39.180507392] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:39.190736191] [5482]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:39.192352793] [5482]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:39.193399391] [5482]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:39.193410836] [5482]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:39.193530077] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:39.193590448] [5482]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:41.830380121] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:41.840682958] [5494]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:41.842289374] [5494]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:41.843335158] [5494]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:41.843346343] [5494]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:41.843457251] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:41.843514789] [5494]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:44.482035425] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:44.492231817] [5497]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:44.493830344] [5497]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:44.494848758] [5497]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:44.494859591] [5497]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:44.494967499] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:44.495024666] [5497]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[0:33:47.172977852] [5456]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:33:47.183354337] [5500]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:33:47.185054255] [5500]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:33:47.186106279] [5500]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:33:47.186116983] [5500]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:33:47.186221520] [5456]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:33:47.186282113] [5500]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,57 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,54 < 15
+[0m[33m[init]: disparity is 0.733,0.406 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.811,0.450 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.744,0.473 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.826,0.350 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.935,0.323 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.828,0.411 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.822,0.339 (20.00 thresh)
+[0m[32m[init]: successful initialization in 0.0004 seconds
+[0m[32m[init]: orientation = 0.4093, -0.4242, -0.5657, 0.5766
+[0m[32m[init]: bias gyro = 0.0056, -0.0118, -0.0032
+[0m[32m[init]: velocity = 0.0000, 0.0000, 0.0000
+[0m[32m[init]: bias accel = -0.0063, -0.2320, -0.0743
+[0m[32m[init]: position = 0.0000, 0.0000, 0.0000
+[0mSetting printing level to: WARNING
+
+  *** INITIALIZED at t=2028.224 s -- poses streaming; zero-velocity updates hold it while it rests ***
+
+
+  --- moving: first full visual update at t=2032.865 s ---
+
+vio_live: 1190 frames received, 1189 processed, 0 dropped

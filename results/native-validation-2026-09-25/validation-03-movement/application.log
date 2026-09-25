@@ -1,0 +1,57 @@
+Setting printing level to: INFO
+[0:35:27.911862319] [5591]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[0:35:27.920457332] [5594]  INFO RPI pisp.cpp:725 libpisp version v1.7.0 07-08-2026 (09:22:13)
+[0:35:27.949999359] [5594]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/ov9281_mono.json
+[0:35:27.951050581] [5594]  INFO Camera camera_manager.cpp:223 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60' for pipeline handler rpi/pisp
+[0:35:27.951063470] [5594]  INFO RPI pisp.cpp:1186 Registered camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[0:35:27.951186801] [5591]  INFO Camera camera.cpp:1216 configuring streams: (0) 1280x800-R16/RAW
+[0:35:27.951242189] [5594]  INFO RPI pisp.cpp:1502 Sensor: /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60 - Selected sensor format: 1280x800-Y8_1X8/RAW - Selected CFE format: 1280x800-Y16 /RAW/Linear/Rec601/Limited
+camera /base/axi/pcie@1000120000/rp1/i2c@88000/ov9281@60: 1280x800-R16/RAW stride=2560
+[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,0 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,55 < 15
+[0m[33m[init]: not enough feats to compute disp: 0,54 < 15
+[0m[33m[init]: disparity is 0.447,0.754 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.595,0.480 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.862,0.374 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.935,0.352 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 0.953,0.274 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 1.054,0.187 (20.00 thresh)
+[0m[33m[init-s]: unable to select window of IMU readings, not enough readings
+[0m[33m[init]: disparity is 1.002,0.170 (20.00 thresh)
+[0m[32m[init]: successful initialization in 0.0003 seconds
+[0m[32m[init]: orientation = 0.4092, -0.4242, -0.5658, 0.5766
+[0m[32m[init]: bias gyro = 0.0057, -0.0121, -0.0032
+[0m[32m[init]: velocity = 0.0000, 0.0000, 0.0000
+[0m[32m[init]: bias accel = -0.0063, -0.2316, -0.0743
+[0m[32m[init]: position = 0.0000, 0.0000, 0.0000
+[0mSetting printing level to: WARNING
+
+  *** INITIALIZED at t=2128.999 s -- poses streaming; zero-velocity updates hold it while it rests ***
+
+
+  --- moving: first full visual update at t=2150.348 s ---
+
+vio_live: 2846 frames received, 2845 processed, 0 dropped

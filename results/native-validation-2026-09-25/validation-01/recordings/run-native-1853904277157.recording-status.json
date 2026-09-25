@@ -1,0 +1,1 @@
+{"version":1,"writer_drained":true,"reason":"none","streams":{"accel":{"submitted":3483,"written":3483,"rejected":0},"gyro":{"submitted":3482,"written":3482,"rejected":0},"camera":{"submitted":1206,"written":1206,"rejected":0},"estimate":{"submitted":1178,"written":1178,"rejected":0},"features":{"submitted":1206,"written":1206,"rejected":0}}}

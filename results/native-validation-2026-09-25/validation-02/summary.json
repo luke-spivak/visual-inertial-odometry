@@ -1,0 +1,24 @@
+{
+  "error": null,
+  "exit_code": 0,
+  "max_poll_gap_ms": 23.73575,
+  "counts": {
+    "fc:HEARTBEAT": 90,
+    "native:HEARTBEAT": 90,
+    "fc:TIMESYNC": 9,
+    "fc:STATUSTEXT": 9,
+    "fc:PARAM_VALUE": 3,
+    "native:VISION_POSITION_ESTIMATE": 1160,
+    "native:VISION_SPEED_ESTIMATE": 1160,
+    "native:COMMAND_LONG": 1,
+    "fc:COMMAND_ACK": 1
+  },
+  "alignment_accepted": true,
+  "reset_counters": [
+    2
+  ],
+  "poses": 1160,
+  "lag_p95_ms": 49.219536,
+  "lag_max_ms": 72.916858,
+  "passed": true
+}

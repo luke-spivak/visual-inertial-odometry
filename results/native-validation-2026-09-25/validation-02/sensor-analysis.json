@@ -1,0 +1,54 @@
+{
+  "camera": {
+    "frames": 1190,
+    "hz": 19.20015326534455,
+    "sequence_gaps": 0
+  },
+  ".imu_gyro": {
+    "samples": 27472,
+    "hz": 439.5637378643972,
+    "max_gap_ms": 2.299937,
+    "regressions": 0
+  },
+  ".imu_accel": {
+    "samples": 27489,
+    "hz": 439.5643899267196,
+    "max_gap_ms": 2.299937,
+    "regressions": 0
+  },
+  "recording_status": [
+    {
+      "version": 1,
+      "writer_drained": true,
+      "reason": "none",
+      "streams": {
+        "accel": {
+          "submitted": 3436,
+          "written": 3436,
+          "rejected": 0
+        },
+        "gyro": {
+          "submitted": 3434,
+          "written": 3434,
+          "rejected": 0
+        },
+        "camera": {
+          "submitted": 1190,
+          "written": 1190,
+          "rejected": 0
+        },
+        "estimate": {
+          "submitted": 1161,
+          "written": 1161,
+          "rejected": 0
+        },
+        "features": {
+          "submitted": 1189,
+          "written": 1189,
+          "rejected": 0
+        }
+      }
+    }
+  ],
+  "complete_markers": 1
+}

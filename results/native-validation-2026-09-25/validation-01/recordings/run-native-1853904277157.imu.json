@@ -1,0 +1,100 @@
+{
+  "devices": {
+    "accel": {
+      "channels": [
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_accel_x",
+          "offset": 0,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_accel_y",
+          "offset": 2,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_accel_z",
+          "offset": 4,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 64,
+          "endian": "le",
+          "name": "in_timestamp",
+          "offset": 8,
+          "shift": 0,
+          "signed": true,
+          "storage": 8
+        }
+      ],
+      "chardev": "/dev/iio:device1",
+      "file": "/home/luke/vio-native-staged/validation-01/recordings/run-native-1853904277157.imu_accel.bin",
+      "name": "ism330dhcx_accel",
+      "odr_hz": 416.0,
+      "record_bytes": 16,
+      "scale": 0.004785645,
+      "sysfs": "/sys/bus/iio/devices/iio:device1",
+      "timestamp_clock": "monotonic"
+    },
+    "gyro": {
+      "channels": [
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_anglvel_x",
+          "offset": 0,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_anglvel_y",
+          "offset": 2,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 16,
+          "endian": "le",
+          "name": "in_anglvel_z",
+          "offset": 4,
+          "shift": 0,
+          "signed": true,
+          "storage": 2
+        },
+        {
+          "bits": 64,
+          "endian": "le",
+          "name": "in_timestamp",
+          "offset": 8,
+          "shift": 0,
+          "signed": true,
+          "storage": 8
+        }
+      ],
+      "chardev": "/dev/iio:device0",
+      "file": "/home/luke/vio-native-staged/validation-01/recordings/run-native-1853904277157.imu_gyro.bin",
+      "name": "ism330dhcx_gyro",
+      "odr_hz": 416.0,
+      "record_bytes": 16,
+      "scale": 0.001221729,
+      "sysfs": "/sys/bus/iio/devices/iio:device0",
+      "timestamp_clock": "monotonic"
+    }
+  }
+}
