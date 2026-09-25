@@ -51,6 +51,106 @@ public:
 private:
     std::thread thread_;
 };
+
+struct Recording {
+    std::filesystem::path prefix;
+    bool enabled;
+};
+
+/// Save the configuration alongside this capture, even when disk space disables raw recording.
+Recording prepare_recording(const FlightConfig& config, Exposure exposure) {
+    std::filesystem::create_directories(config.recording_dir);
+    const auto prefix = config.recording_dir / ("run-native-" + std::to_string(now().count()));
+    const bool record =
+        std::filesystem::space(config.recording_dir).available / 1e9 >= config.min_free_gb;
+    save(prefix.string() + ".flight.json", config.snapshot);
+    save(prefix.string() + ".exposure.json",
+         {{"shutter_us", exposure.shutter}, {"gain", exposure.gain}});
+    if (record) {
+        nlohmann::json configs = nlohmann::json::object();
+        for (const auto& file :
+             std::filesystem::directory_iterator(config.estimator_config.parent_path())) {
+            if (file.path().extension() != ".yaml")
+                continue;
+            std::ifstream input(file.path());
+            configs[file.path().filename().string()] =
+                std::string(std::istreambuf_iterator<char>(input), {});
+        }
+        save(prefix.string() + ".recording.json", {{"version", 1},
+                                                   {"width", 1280},
+                                                   {"height", 800},
+                                                   {"clock", "CLOCK_MONOTONIC"},
+                                                   {"config_files", configs}});
+    }
+    return {prefix, record};
+}
+
+/// Run acquisition while the main thread services the flight controller; unwind before returning.
+void run_capture(const FlightConfig& config, EstimatorRunner& estimator, MavlinkLink& link,
+                 const CameraPipes& pipes, Exposure exposure, SessionGeneration generation,
+                 HardwarePaths paths, const std::function<bool()>& pump,
+                 const std::function<bool()>& stopping) {
+    const auto recording = prepare_recording(config, exposure);
+    const auto& prefix = recording.prefix;
+    const bool record = recording.enabled;
+    ImuDevices imu(config.watermark, paths.sysfs, paths.devices);
+    imu.save_metadata(prefix);
+    RunnerOptions options;
+    options.devices = imu.devices();
+    options.frames = pipes.frames();
+    options.metadata = pipes.metadata();
+    options.imu_lpf_hz = config.imu_lpf;
+    options.imu_rate_hz = options.devices.front().rate_hz;
+    options.generation = generation;
+    if (record) {
+        options.recording_prefix = prefix;
+        options.estimate_log = prefix.string() + ".est.txt";
+    }
+    LatestEstimate estimates;
+    std::exception_ptr capture_error;
+    int camera_exit = -1;
+    bool requested_stop = false;
+    {
+        CaptureWorker worker(estimator, options, estimates);
+        ChildProcess camera(camera_command(config, exposure, pipes.frames(), pipes.metadata()),
+                            prefix.string() + ".cam.log");
+        const auto started = now();
+        try {
+            while (pump() && !worker.done && !camera.poll()) {
+                if (auto estimate = estimates.load()) {
+                    link.publish(*estimate, now());
+                    if (now() - estimate->timestamp > std::chrono::seconds(3))
+                        throw std::runtime_error("estimator stopped producing fresh snapshots");
+                } else if (now() - started > std::chrono::seconds(60)) {
+                    throw std::runtime_error("estimator initialization timed out");
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            requested_stop = stopping();
+            if (!requested_stop)
+                throw std::runtime_error("camera or estimator ended unexpectedly");
+        } catch (...) {
+            capture_error = std::current_exception();
+        }
+        // Stop publication before stopping capture; no stale poses during cleanup.
+        link.end_session();
+        worker.stop = true;
+        camera.stop(SIGINT, std::chrono::seconds(2));
+        camera_exit = camera.poll().value_or(-1);
+        while (!worker.done) {
+            // Keep heartbeats and SIGTERM responsive while acquisition unwinds.
+            link.poll(now());
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        if (worker.error)
+            capture_error = worker.error;
+    }
+    if (capture_error)
+        std::rethrow_exception(capture_error);
+    if (record && requested_stop && camera_exit == 0)
+        save(prefix.string() + ".complete.json",
+             {{"version", 1}, {"vio_exit", 0}, {"camera_exit", camera_exit}});
+}
 } // namespace
 
 void run_flight(const FlightConfig& config,
@@ -96,89 +196,8 @@ void run_flight(const FlightConfig& config,
             });
             if (!pump() || !link.controller_disarmed(now()))
                 continue;
-            std::filesystem::create_directories(config.recording_dir);
-            const auto prefix =
-                config.recording_dir / ("run-native-" + std::to_string(now().count()));
-            const bool record =
-                std::filesystem::space(config.recording_dir).available / 1e9 >= config.min_free_gb;
-            save(prefix.string() + ".flight.json", config.snapshot);
-            save(prefix.string() + ".exposure.json",
-                 {{"shutter_us", exposure.shutter}, {"gain", exposure.gain}});
-            if (record) {
-                nlohmann::json configs = nlohmann::json::object();
-                for (const auto& file :
-                     std::filesystem::directory_iterator(config.estimator_config.parent_path())) {
-                    if (file.path().extension() != ".yaml")
-                        continue;
-                    std::ifstream input(file.path());
-                    configs[file.path().filename().string()] =
-                        std::string(std::istreambuf_iterator<char>(input), {});
-                }
-                save(prefix.string() + ".recording.json", {{"version", 1},
-                                                           {"width", 1280},
-                                                           {"height", 800},
-                                                           {"clock", "CLOCK_MONOTONIC"},
-                                                           {"config_files", configs}});
-            }
-            ImuDevices imu(config.watermark, paths.sysfs, paths.devices);
-            imu.save_metadata(prefix);
-            RunnerOptions options;
-            options.devices = imu.devices();
-            options.frames = pipes.frames();
-            options.metadata = pipes.metadata();
-            options.imu_lpf_hz = config.imu_lpf;
-            options.imu_rate_hz = options.devices.front().rate_hz;
-            options.generation = {generation};
-            if (record) {
-                options.recording_prefix = prefix;
-                options.estimate_log = prefix.string() + ".est.txt";
-            }
-            LatestEstimate estimates;
-            std::exception_ptr capture_error;
-            int camera_exit = -1;
-            bool requested_stop = false;
-            {
-                CaptureWorker worker(*estimator, options, estimates);
-                ChildProcess camera(
-                    camera_command(config, exposure, pipes.frames(), pipes.metadata()),
-                    prefix.string() + ".cam.log");
-                const auto started = now();
-                try {
-                    while (pump() && !worker.done && !camera.poll()) {
-                        if (auto estimate = estimates.load()) {
-                            link.publish(*estimate, now());
-                            if (now() - estimate->timestamp > std::chrono::seconds(3))
-                                throw std::runtime_error(
-                                    "estimator stopped producing fresh snapshots");
-                        } else if (now() - started > std::chrono::seconds(60)) {
-                            throw std::runtime_error("estimator initialization timed out");
-                        }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    }
-                    requested_stop = stopping();
-                    if (!requested_stop)
-                        throw std::runtime_error("camera or estimator ended unexpectedly");
-                } catch (...) {
-                    capture_error = std::current_exception();
-                }
-                // Stop publication before stopping capture; no stale poses during cleanup.
-                link.end_session();
-                worker.stop = true;
-                camera.stop(SIGINT, std::chrono::seconds(2));
-                camera_exit = camera.poll().value_or(-1);
-                while (!worker.done) {
-                    // Keep heartbeats and SIGTERM responsive while acquisition unwinds.
-                    link.poll(now());
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                }
-                if (worker.error)
-                    capture_error = worker.error;
-            }
-            if (capture_error)
-                std::rethrow_exception(capture_error);
-            if (record && requested_stop && camera_exit == 0)
-                save(prefix.string() + ".complete.json",
-                     {{"version", 1}, {"vio_exit", 0}, {"camera_exit", camera_exit}});
+            run_capture(config, *estimator, link, pipes, exposure, {generation}, paths, pump,
+                        stopping);
             backoff = 5;
         } catch (const std::exception& error) {
             std::cerr << "capture " << generation << ": " << error.what() << '\n';
