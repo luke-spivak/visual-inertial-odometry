@@ -11,10 +11,25 @@ target_include_directories(vio_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vio_core PUBLIC Eigen3::Eigen)
 target_compile_options(vio_core PRIVATE -Wall -Wextra -Wpedantic)
 
+include(cmake/Mavlink.cmake)
+add_library(vio_flight_link flight_session.cpp serial_port.cpp mavlink_link.cpp)
+target_link_libraries(vio_flight_link PUBLIC vio_core vio_mavlink_headers)
+target_compile_options(vio_flight_link PRIVATE -Wall -Wextra -Wpedantic)
+
 include(CTest)
 if(BUILD_TESTING)
+  find_package(Threads REQUIRED)
+  add_executable(test_serial_port ../tests/test_serial_port.cpp)
+  target_link_libraries(test_serial_port PRIVATE vio_flight_link Threads::Threads)
+  add_test(NAME serial_port COMMAND test_serial_port)
+  add_executable(test_mavlink_link ../tests/test_mavlink_link.cpp)
+  target_link_libraries(test_mavlink_link PRIVATE vio_flight_link)
+  add_test(NAME mavlink_link COMMAND test_mavlink_link
+    ${CMAKE_CURRENT_SOURCE_DIR}/../results/flight-review-2026-09-15/pi/run-20260915-121608.est.txt)
+
   add_executable(test_navigation ../tests/test_navigation.cpp)
   target_link_libraries(test_navigation PRIVATE vio_core)
   add_test(NAME navigation COMMAND test_navigation
            ${CMAKE_CURRENT_SOURCE_DIR}/../tests/data/navigation_cases.txt)
+  set_tests_properties(serial_port mavlink_link navigation PROPERTIES TIMEOUT 30)
 endif()
